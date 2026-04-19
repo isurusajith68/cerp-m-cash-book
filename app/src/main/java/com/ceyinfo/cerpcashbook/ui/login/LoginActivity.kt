@@ -15,11 +15,11 @@ import androidx.recyclerview.widget.RecyclerView
 import com.ceyinfo.cerpcashbook.R
 import com.ceyinfo.cerpcashbook.data.model.LoginRequest
 import com.ceyinfo.cerpcashbook.data.model.Organization
+import com.ceyinfo.cerpcashbook.data.model.SelectUnitRequest
 import com.ceyinfo.cerpcashbook.data.remote.ApiClient
 import com.ceyinfo.cerpcashbook.databinding.ActivityLoginBinding
 import com.ceyinfo.cerpcashbook.databinding.ItemOrgBinding
-import com.ceyinfo.cerpcashbook.ui.buselect.BuSelectActivity
-import com.ceyinfo.cerpcashbook.ui.dashboard.DashboardActivity
+import com.ceyinfo.cerpcashbook.ui.hub.ModuleHubActivity
 import com.ceyinfo.cerpcashbook.util.NetworkMonitor
 import com.ceyinfo.cerpcashbook.util.SessionManager
 import com.google.android.material.bottomsheet.BottomSheetDialog
@@ -43,17 +43,19 @@ class LoginActivity : AppCompatActivity() {
         session = SessionManager(this)
         networkMonitor = NetworkMonitor(this)
 
-        // If already logged in with a BU selected, go to dashboard
-        if (session.isLoggedIn && session.businessUnitId != null) {
-            startActivity(Intent(this, DashboardActivity::class.java))
-            finish()
-            return
-        }
-
-        // If logged in but no BU, go to BU select
-        if (session.isLoggedIn && session.businessUnitId == null) {
-            startActivity(Intent(this, BuSelectActivity::class.java))
-            finish()
+        // Already logged in → go straight to the Module Hub. If a BU was never
+        // selected in this install, auto-pick the first available site so the user
+        // lands on a functional hub without seeing the BU picker.
+        if (session.isLoggedIn) {
+            if (session.businessUnitId != null) {
+                goToHub()
+            } else {
+                setLoading(true)
+                lifecycleScope.launch {
+                    autoSelectFirstBuThenGoToHub()
+                    setLoading(false)
+                }
+            }
             return
         }
 
@@ -111,8 +113,9 @@ class LoginActivity : AppCompatActivity() {
                     session.organizationId = data.organizationId
                     session.isOwner = data.isOwner
 
-                    startActivity(Intent(this@LoginActivity, BuSelectActivity::class.java))
-                    finish()
+                    // Auto-select first BU so the user lands on the Module Hub,
+                    // not a BU picker. They can change BU from the hub later.
+                    autoSelectFirstBuThenGoToHub()
                 } else {
                     val msg = response.body()?.message
                         ?: response.errorBody()?.string()
@@ -182,6 +185,54 @@ class LoginActivity : AppCompatActivity() {
         binding.etEmail.isEnabled = !loading
         binding.etPassword.isEnabled = !loading
         if (loading) binding.tvError.visibility = View.GONE
+    }
+
+    private fun goToHub() {
+        startActivity(Intent(this, ModuleHubActivity::class.java))
+        finish()
+    }
+
+    /**
+     * Fetch the user's cash-role assignments, auto-select the first available site,
+     * and navigate to the Module Hub. If no sites are available (or the network
+     * fails), we still land on the hub — it handles the "No Site" empty state.
+     */
+    private suspend fun autoSelectFirstBuThenGoToHub() {
+        try {
+            val api = ApiClient.getService(this@LoginActivity)
+            val roleResp = api.getMyRole()
+            if (roleResp.isSuccessful && roleResp.body()?.success == true) {
+                val roleData = roleResp.body()!!.data!!
+                session.cashRole = roleData.role
+
+                // Prefer a clerk site; fall back to a custodian site
+                val firstClerk = roleData.clerkSites.firstOrNull()
+                val firstCustodian = roleData.custodianSites.firstOrNull()
+                val chosen = firstClerk ?: firstCustodian
+
+                if (chosen != null) {
+                    val selectResp = api.selectUnit(SelectUnitRequest(chosen.siteBuId))
+                    if (selectResp.isSuccessful && selectResp.body()?.success == true) {
+                        val sel = selectResp.body()!!.data!!
+                        session.businessUnitId = sel.businessUnitId
+                        session.businessUnitName = sel.businessUnitName
+
+                        // Derive the role specific to the chosen site
+                        val inClerk = roleData.clerkSites.any { it.siteBuId == chosen.siteBuId }
+                        val inCustodian = roleData.custodianSites.any { it.siteBuId == chosen.siteBuId }
+                        session.cashRole = when {
+                            inClerk && inCustodian -> "both"
+                            inClerk -> "clerk"
+                            inCustodian -> "custodian"
+                            else -> roleData.role
+                        }
+                    }
+                }
+            }
+        } catch (_: Exception) {
+            // Non-fatal — the hub shows a "No Site" state and the user can tap "Change".
+        }
+        goToHub()
     }
 
     override fun onDestroy() {

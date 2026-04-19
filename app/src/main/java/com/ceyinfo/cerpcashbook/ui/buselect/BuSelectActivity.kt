@@ -16,7 +16,7 @@ import com.ceyinfo.cerpcashbook.data.model.BusinessUnit
 import com.ceyinfo.cerpcashbook.data.model.SelectUnitRequest
 import com.ceyinfo.cerpcashbook.data.remote.ApiClient
 import com.ceyinfo.cerpcashbook.databinding.ActivityBuSelectBinding
-import com.ceyinfo.cerpcashbook.ui.dashboard.DashboardActivity
+import com.ceyinfo.cerpcashbook.ui.hub.ModuleHubActivity
 import com.ceyinfo.cerpcashbook.ui.login.LoginActivity
 import com.ceyinfo.cerpcashbook.util.SessionManager
 import com.google.android.material.chip.Chip
@@ -236,7 +236,9 @@ class BuSelectActivity : AppCompatActivity() {
                     session.businessUnitName = data.businessUnitName
                     session.cashRole = bu.cashRole ?: session.cashRole
 
-                    startActivity(Intent(this@BuSelectActivity, DashboardActivity::class.java))
+                    // Return to existing Hub instance (don't stack a new one).
+                    startActivity(Intent(this@BuSelectActivity, ModuleHubActivity::class.java)
+                        .addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP))
                     finish()
                 } else {
                     Toast.makeText(

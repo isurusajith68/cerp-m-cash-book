@@ -12,38 +12,33 @@
         android:layout_height="0dp"
         android:layout_weight="1">
 
-    <ScrollView
-        android:layout_width="match_parent"
-        android:layout_height="match_parent"
-        android:fillViewport="true">
-
-        <FrameLayout
+        <ScrollView
             android:layout_width="match_parent"
-            android:layout_height="wrap_content">
+            android:layout_height="match_parent"
+            android:fillViewport="true">
 
-            <View
+            <FrameLayout
                 android:layout_width="match_parent"
-                android:layout_height="220dp"
-                android:background="@drawable/bg_dashboard_header" />
+                android:layout_height="wrap_content">
 
-            <LinearLayout
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:orientation="vertical">
+                <View
+                    android:layout_width="match_parent"
+                    android:layout_height="220dp"
+                    android:background="@drawable/bg_dashboard_header" />
 
-                <!-- Header -->
                 <LinearLayout
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:orientation="vertical"
-                    android:paddingHorizontal="20dp"
-                    android:paddingTop="48dp">
+                    android:orientation="vertical">
 
+                    <!-- Header: avatar / email / change BU -->
                     <LinearLayout
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
                         android:gravity="center_vertical"
-                        android:orientation="horizontal">
+                        android:orientation="horizontal"
+                        android:paddingHorizontal="20dp"
+                        android:paddingTop="48dp">
 
                         <FrameLayout
                             android:layout_width="40dp"
@@ -80,28 +75,18 @@
                                 android:textColor="@color/white"
                                 android:textSize="13sp" />
 
-                            <LinearLayout
+                            <TextView
+                                android:id="@+id/tv_role_badge"
                                 android:layout_width="wrap_content"
                                 android:layout_height="wrap_content"
-                                android:layout_marginTop="2dp"
-                                android:gravity="center_vertical"
-                                android:orientation="horizontal">
-
-                                <View
-                                    android:id="@+id/dot_status"
-                                    android:layout_width="7dp"
-                                    android:layout_height="7dp"
-                                    android:background="@drawable/bg_status_dot" />
-
-                                <TextView
-                                    android:id="@+id/tv_status"
-                                    android:layout_width="wrap_content"
-                                    android:layout_height="wrap_content"
-                                    android:layout_marginStart="5dp"
-                                    android:text="Online"
-                                    android:textColor="#90A4AE"
-                                    android:textSize="11sp" />
-                            </LinearLayout>
+                                android:layout_marginTop="4dp"
+                                android:background="@drawable/bg_level_badge"
+                                android:paddingHorizontal="10dp"
+                                android:paddingVertical="3dp"
+                                android:textAllCaps="true"
+                                android:textColor="@color/white"
+                                android:textSize="10sp"
+                                android:letterSpacing="0.08" />
                         </LinearLayout>
 
                         <com.google.android.material.button.MaterialButton
@@ -116,182 +101,69 @@
                             android:textSize="11sp" />
                     </LinearLayout>
 
-                    <!-- Site name + role badge -->
-                    <TextView
-                        android:id="@+id/tv_bu_name"
-                        android:layout_width="wrap_content"
-                        android:layout_height="wrap_content"
-                        android:layout_marginTop="20dp"
-                        android:fontFamily="sans-serif-medium"
-                        android:textColor="@color/white"
-                        android:textSize="22sp"
-                        android:textStyle="bold" />
-
+                    <!-- BU name + subtitle -->
                     <LinearLayout
-                        android:layout_width="wrap_content"
+                        android:layout_width="match_parent"
                         android:layout_height="wrap_content"
-                        android:layout_marginTop="6dp"
-                        android:gravity="center_vertical"
-                        android:orientation="horizontal">
+                        android:orientation="vertical"
+                        android:paddingHorizontal="20dp"
+                        android:paddingTop="18dp">
 
                         <TextView
-                            android:id="@+id/tv_role_badge"
+                            android:id="@+id/tv_bu_name"
                             android:layout_width="wrap_content"
                             android:layout_height="wrap_content"
-                            android:background="@drawable/bg_level_badge"
-                            android:paddingHorizontal="10dp"
-                            android:paddingVertical="3dp"
-                            android:textAllCaps="true"
+                            android:fontFamily="sans-serif-medium"
                             android:textColor="@color/white"
-                            android:textSize="10sp"
-                            android:letterSpacing="0.08" />
+                            android:textSize="22sp"
+                            android:textStyle="bold" />
 
-                        <!-- Balance card (custodian only) -->
                         <TextView
-                            android:id="@+id/tv_balance"
+                            android:id="@+id/tv_hub_subtitle"
                             android:layout_width="wrap_content"
                             android:layout_height="wrap_content"
-                            android:layout_marginStart="12dp"
-                            android:textColor="#A7F3D0"
-                            android:textSize="14sp"
-                            android:textStyle="bold"
-                            android:visibility="gone" />
+                            android:layout_marginTop="4dp"
+                            android:text="@string/hub_subtitle"
+                            android:textColor="#B0C4CF"
+                            android:textSize="12sp" />
+                    </LinearLayout>
+
+                    <!-- Module tiles -->
+                    <LinearLayout
+                        android:id="@+id/modules_container"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="22dp"
+                        android:orientation="vertical"
+                        android:paddingHorizontal="16dp"
+                        android:paddingBottom="24dp">
+
+                        <LinearLayout
+                            android:id="@+id/row1"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:orientation="horizontal" />
+
+                        <LinearLayout
+                            android:id="@+id/row2"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:layout_marginTop="12dp"
+                            android:orientation="horizontal" />
+
+                        <LinearLayout
+                            android:id="@+id/row3"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:layout_marginTop="12dp"
+                            android:orientation="horizontal" />
                     </LinearLayout>
                 </LinearLayout>
-
-                <!-- Role-wise alerts (clerk: pending approvals; custodian: low balance) -->
-                <LinearLayout
-                    android:id="@+id/alerts_container"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:layout_marginTop="16dp"
-                    android:orientation="vertical"
-                    android:paddingHorizontal="16dp"
-                    android:visibility="gone" />
-
-                <!-- Stats cards row -->
-                <LinearLayout
-                    android:id="@+id/stats_row"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:layout_marginTop="16dp"
-                    android:orientation="horizontal"
-                    android:paddingHorizontal="16dp"
-                    android:visibility="gone">
-
-                    <com.google.android.material.card.MaterialCardView
-                        android:layout_width="0dp"
-                        android:layout_height="wrap_content"
-                        android:layout_marginEnd="6dp"
-                        android:layout_weight="1"
-                        app:cardCornerRadius="12dp"
-                        app:cardElevation="0dp"
-                        app:strokeColor="#E8EEF4"
-                        app:strokeWidth="1dp">
-
-                        <LinearLayout
-                            android:layout_width="match_parent"
-                            android:layout_height="wrap_content"
-                            android:orientation="vertical"
-                            android:padding="14dp">
-
-                            <TextView
-                                android:id="@+id/tv_stat1_value"
-                                android:layout_width="wrap_content"
-                                android:layout_height="wrap_content"
-                                android:text="0"
-                                android:textColor="@color/on_surface"
-                                android:textSize="20sp"
-                                android:textStyle="bold" />
-
-                            <TextView
-                                android:id="@+id/tv_stat1_label"
-                                android:layout_width="wrap_content"
-                                android:layout_height="wrap_content"
-                                android:layout_marginTop="2dp"
-                                android:text="Pending"
-                                android:textColor="@color/text_secondary"
-                                android:textSize="11sp" />
-                        </LinearLayout>
-                    </com.google.android.material.card.MaterialCardView>
-
-                    <com.google.android.material.card.MaterialCardView
-                        android:layout_width="0dp"
-                        android:layout_height="wrap_content"
-                        android:layout_marginStart="6dp"
-                        android:layout_weight="1"
-                        app:cardCornerRadius="12dp"
-                        app:cardElevation="0dp"
-                        app:strokeColor="#E8EEF4"
-                        app:strokeWidth="1dp">
-
-                        <LinearLayout
-                            android:layout_width="match_parent"
-                            android:layout_height="wrap_content"
-                            android:orientation="vertical"
-                            android:padding="14dp">
-
-                            <TextView
-                                android:id="@+id/tv_stat2_value"
-                                android:layout_width="wrap_content"
-                                android:layout_height="wrap_content"
-                                android:text="0"
-                                android:textColor="@color/on_surface"
-                                android:textSize="20sp"
-                                android:textStyle="bold" />
-
-                            <TextView
-                                android:id="@+id/tv_stat2_label"
-                                android:layout_width="wrap_content"
-                                android:layout_height="wrap_content"
-                                android:layout_marginTop="2dp"
-                                android:text="Approved"
-                                android:textColor="@color/text_secondary"
-                                android:textSize="11sp" />
-                        </LinearLayout>
-                    </com.google.android.material.card.MaterialCardView>
-                </LinearLayout>
-
-                <!-- Action cards grid -->
-                <LinearLayout
-                    android:id="@+id/cards_container"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:layout_marginTop="20dp"
-                    android:orientation="vertical"
-                    android:paddingHorizontal="16dp"
-                    android:paddingBottom="20dp">
-
-                    <!-- Row 1 -->
-                    <LinearLayout
-                        android:id="@+id/row1"
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:orientation="horizontal" />
-
-                    <!-- Row 2 -->
-                    <LinearLayout
-                        android:id="@+id/row2"
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:layout_marginTop="12dp"
-                        android:orientation="horizontal" />
-
-                    <!-- Row 3 (optional) -->
-                    <LinearLayout
-                        android:id="@+id/row3"
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:layout_marginTop="12dp"
-                        android:orientation="horizontal"
-                        android:visibility="gone" />
-                </LinearLayout>
-            </LinearLayout>
-        </FrameLayout>
-    </ScrollView>
+            </FrameLayout>
+        </ScrollView>
     </androidx.swiperefreshlayout.widget.SwipeRefreshLayout>
 
-    <!-- Bottom nav -->
+    <!-- Bottom nav (same look as dashboard) -->
     <LinearLayout
         android:id="@+id/bottom_bar"
         android:layout_width="match_parent"

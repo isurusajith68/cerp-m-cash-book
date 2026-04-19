@@ -33,6 +33,10 @@
             android:theme="@style/Theme.CashBook.NoActionBar" />
 
         <activity
+            android:name=".ui.hub.ModuleHubActivity"
+            android:theme="@style/Theme.CashBook.NoActionBar" />
+
+        <activity
             android:name=".ui.dashboard.DashboardActivity"
             android:theme="@style/Theme.CashBook.NoActionBar" />
 
@@ -66,6 +70,14 @@
 
         <activity
             android:name=".ui.custodians.CustodiansActivity"
+            android:theme="@style/Theme.CashBook.NoActionBar" />
+
+        <activity
+            android:name=".ui.advances.CashAdvancesTabActivity"
+            android:theme="@style/Theme.CashBook.NoActionBar" />
+
+        <activity
+            android:name=".ui.advances.CashAdvanceDetailActivity"
             android:theme="@style/Theme.CashBook.NoActionBar" />
 
     </application>

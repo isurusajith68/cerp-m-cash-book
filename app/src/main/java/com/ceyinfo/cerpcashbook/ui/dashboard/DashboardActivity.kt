@@ -271,6 +271,10 @@ class DashboardActivity : AppCompatActivity() {
     private fun loadDashboardStats() {
         val siteId = session.businessUnitId ?: return
 
+        // Reset alerts so pull-to-refresh doesn't stack duplicate cards
+        binding.alertsContainer.removeAllViews()
+        binding.alertsContainer.visibility = View.GONE
+
         lifecycleScope.launch {
             try {
                 val api = ApiClient.getService(this@DashboardActivity)
@@ -308,7 +312,12 @@ class DashboardActivity : AppCompatActivity() {
                         binding.tvNotifBadge.visibility = View.VISIBLE
                     }
 
-                    // Balance for custodian
+                    // Role-wise alert: pending approvals (clerk/both)
+                    if ((role == "clerk" || role == "both") && stats.vouchers.pendingReview > 0) {
+                        showPendingApprovalsAlert(stats.vouchers.pendingReview)
+                    }
+
+                    // Balance for custodian — also drives the low-balance alert
                     if (role == "custodian" || role == "both") {
                         loadBalance(siteId)
                     }
@@ -330,9 +339,129 @@ class DashboardActivity : AppCompatActivity() {
                     val bal = response.body()!!.data!!
                     binding.tvBalance.text = "Balance: LKR ${String.format("%,.2f", bal.balance)}"
                     binding.tvBalance.visibility = View.VISIBLE
+
+                    if (bal.balance < LOW_BALANCE_THRESHOLD) {
+                        showLowBalanceAlert(bal.balance)
+                    }
                 }
             } catch (_: Exception) { }
         }
+    }
+
+    private fun showPendingApprovalsAlert(count: Int) {
+        val title = getString(R.string.alert_pending_approvals)
+        val subtitle = "$count voucher${if (count == 1) "" else "s"} awaiting review — ${getString(R.string.alert_tap_to_review)}"
+        addAlertCard(
+            title = title,
+            subtitle = subtitle,
+            iconRes = R.drawable.ic_review,
+            accentColor = "#2563EB",
+            bgColor = "#EFF6FF",
+        ) {
+            startActivity(Intent(this, ReviewVouchersActivity::class.java))
+        }
+    }
+
+    private fun showLowBalanceAlert(balance: Double) {
+        val title = getString(R.string.alert_low_balance)
+        val subtitle = "LKR ${String.format("%,.2f", balance)} remaining — ${getString(R.string.alert_top_up_needed)}"
+        addAlertCard(
+            title = title,
+            subtitle = subtitle,
+            iconRes = R.drawable.ic_receipt,
+            accentColor = "#D97706",
+            bgColor = "#FFFBEB",
+        ) {
+            // No dedicated top-up flow yet — tap routes to custodian's own ledger for context
+            startActivity(Intent(this, LedgerActivity::class.java))
+        }
+    }
+
+    private fun addAlertCard(
+        title: String,
+        subtitle: String,
+        iconRes: Int,
+        accentColor: String,
+        bgColor: String,
+        onClick: () -> Unit,
+    ) {
+        val dp = resources.displayMetrics.density
+        binding.alertsContainer.visibility = View.VISIBLE
+
+        val card = MaterialCardView(this).apply {
+            layoutParams = LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT,
+            ).apply {
+                if (binding.alertsContainer.childCount > 0) topMargin = (10 * dp).toInt()
+            }
+            radius = 14 * dp
+            cardElevation = 0f
+            setCardBackgroundColor(android.graphics.Color.parseColor(bgColor))
+            strokeColor = android.graphics.Color.parseColor(accentColor)
+            strokeWidth = (1 * dp).toInt()
+            isClickable = true
+            isFocusable = true
+        }
+
+        val row = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+            setPadding((14 * dp).toInt(), (12 * dp).toInt(), (14 * dp).toInt(), (12 * dp).toInt())
+        }
+
+        val iconFrame = FrameLayout(this).apply {
+            layoutParams = LinearLayout.LayoutParams((36 * dp).toInt(), (36 * dp).toInt())
+        }
+        val iconBg = View(this).apply {
+            layoutParams = FrameLayout.LayoutParams((36 * dp).toInt(), (36 * dp).toInt())
+            background = ContextCompat.getDrawable(context, R.drawable.bg_org_icon)?.mutate()
+            (background as? GradientDrawable)?.setColor(android.graphics.Color.parseColor(accentColor))
+        }
+        val iconView = ImageView(this).apply {
+            layoutParams = FrameLayout.LayoutParams((18 * dp).toInt(), (18 * dp).toInt()).apply {
+                gravity = Gravity.CENTER
+            }
+            setImageResource(iconRes)
+            setColorFilter(android.graphics.Color.WHITE)
+        }
+        iconFrame.addView(iconBg)
+        iconFrame.addView(iconView)
+        row.addView(iconFrame)
+
+        val texts = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f).apply {
+                marginStart = (12 * dp).toInt()
+            }
+        }
+        texts.addView(TextView(this).apply {
+            text = title
+            setTextColor(android.graphics.Color.parseColor(accentColor))
+            textSize = 13f
+            paint.isFakeBoldText = true
+        })
+        texts.addView(TextView(this).apply {
+            text = subtitle
+            setTextColor(ContextCompat.getColor(context, R.color.text_secondary))
+            textSize = 11f
+            setPadding(0, (2 * dp).toInt(), 0, 0)
+        })
+        row.addView(texts)
+
+        row.addView(ImageView(this).apply {
+            layoutParams = LinearLayout.LayoutParams((16 * dp).toInt(), (16 * dp).toInt())
+            setImageResource(R.drawable.ic_chevron_right)
+            setColorFilter(android.graphics.Color.parseColor(accentColor))
+        })
+
+        card.addView(row)
+        card.setOnClickListener { onClick() }
+        binding.alertsContainer.addView(card)
+    }
+
+    companion object {
+        private const val LOW_BALANCE_THRESHOLD = 10_000.0
     }
 
     override fun onDestroy() {

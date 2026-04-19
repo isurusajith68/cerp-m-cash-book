@@ -1,10 +1,10 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="app_name">CERP CashBook</string>
+    <string name="app_name">CERP Finance</string>
 
     <!-- Login -->
-    <string name="login_title">Cash Book</string>
-    <string name="login_subtitle">Site Cash Management</string>
+    <string name="login_title">CERP Finance</string>
+    <string name="login_subtitle">Finance Management</string>
     <string name="email_hint">Email</string>
     <string name="password_hint">Password</string>
     <string name="login_button">Sign In</string>
@@ -13,6 +13,32 @@
     <!-- BU Select -->
     <string name="select_bu_title">Select Business Unit</string>
     <string name="search_hint">Search…</string>
+
+    <!-- Module Hub -->
+    <string name="hub_title">Finance Modules</string>
+    <string name="hub_subtitle">Choose a module to continue</string>
+    <string name="module_cash_advance">Cash Advance</string>
+    <string name="module_cash_advance_desc">Issue · receive advances</string>
+    <string name="module_banks">Banks</string>
+    <string name="module_banks_desc">Bank accounts · transfers</string>
+    <string name="module_petty_cash">Petty Cash</string>
+    <string name="module_petty_cash_desc">Small expense float</string>
+    <string name="module_cashbook">Cashbook</string>
+    <string name="module_cashbook_desc">Daily cash journal</string>
+    <string name="module_expense_vouchers">Expense Vouchers</string>
+    <string name="module_expense_vouchers_desc">Submit · review expenses</string>
+    <string name="coming_soon">Coming soon</string>
+
+    <!-- Cash Advances tabbed screen -->
+    <string name="cash_advances_title">Cash Advances</string>
+    <string name="tab_issues">Issues</string>
+    <string name="tab_received">Received</string>
+    <string name="group_by_person">By Person</string>
+    <string name="group_by_site">By Site</string>
+    <string name="add_new">Add New</string>
+    <string name="add_expense">Add Expense</string>
+    <string name="no_records">No records</string>
+    <string name="balance_label">Balance</string>
 
     <!-- Dashboard -->
     <string name="dashboard_title">Cash Book</string>
@@ -23,6 +49,12 @@
     <string name="acknowledge">Acknowledge</string>
     <string name="submit_expense">Submit Expense</string>
     <string name="review_vouchers">Review Vouchers</string>
+
+    <!-- Alerts (role-wise dashboard) -->
+    <string name="alert_pending_approvals">Pending Approvals</string>
+    <string name="alert_low_balance">Low Balance Alert</string>
+    <string name="alert_tap_to_review">Tap to review</string>
+    <string name="alert_top_up_needed">Consider requesting a top-up</string>
 
     <!-- Common -->
     <string name="loading">Loading…</string>
