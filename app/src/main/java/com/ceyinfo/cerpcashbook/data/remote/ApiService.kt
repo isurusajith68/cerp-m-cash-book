@@ -1,6 +1,7 @@
 package com.ceyinfo.cerpcashbook.data.remote
 
 import com.ceyinfo.cerpcashbook.data.model.*
+import okhttp3.MultipartBody
 import retrofit2.Response
 import retrofit2.http.*
 
@@ -58,6 +59,22 @@ interface ApiService {
 
     @PATCH("site-cash/cash-advances/{id}/cancel")
     suspend fun cancelAdvance(@Path("id") id: String): Response<ApiResponse<Any>>
+
+    // ── Site Cash: Bank Accounts ──────────────────────────────────────
+    @GET("site-cash/bank-accounts")
+    suspend fun getBankAccounts(
+        @Query("site_bu_id") siteBuId: String
+    ): Response<ApiResponse<List<BankAccount>>>
+
+    @POST("site-cash/bank-accounts")
+    suspend fun createBankAccount(@Body request: CreateBankAccountRequest): Response<ApiResponse<BankAccount>>
+
+    // ── Site Cash: Advance Receipt Upload ─────────────────────────────
+    @Multipart
+    @POST("site-cash/cash-advances/upload-receipt")
+    suspend fun uploadAdvanceReceipt(
+        @Part file: MultipartBody.Part
+    ): Response<ApiResponse<UploadReceiptData>>
 
     // ── Site Cash: Expense Vouchers ───────────────────────────────────
     @GET("site-cash/expense-vouchers")

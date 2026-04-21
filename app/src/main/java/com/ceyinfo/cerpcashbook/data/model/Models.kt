@@ -128,7 +128,13 @@ data class CashAdvance(
     @SerializedName("custodian_last_name") val custodianLastName: String? = null,
     @SerializedName("disbursed_first_name") val disbursedFirstName: String? = null,
     @SerializedName("disbursed_last_name") val disbursedLastName: String? = null,
-    @SerializedName("site_name") val siteName: String? = null
+    @SerializedName("site_name") val siteName: String? = null,
+    @SerializedName("method_of_transfer") val methodOfTransfer: String? = null,
+    @SerializedName("bank_account_id") val bankAccountId: String? = null,
+    @SerializedName("bank_account_name") val bankAccountName: String? = null,
+    @SerializedName("bank_account_number") val bankAccountNumber: String? = null,
+    @SerializedName("bank_name") val bankName: String? = null,
+    @SerializedName("receipt_url") val receiptUrl: String? = null
 )
 
 data class CreateAdvanceRequest(
@@ -137,7 +143,42 @@ data class CreateAdvanceRequest(
     val amount: Double,
     val currency: String = "LKR",
     @SerializedName("reference_no") val referenceNo: String? = null,
-    val description: String? = null
+    val description: String? = null,
+    @SerializedName("method_of_transfer") val methodOfTransfer: String? = null,
+    @SerializedName("bank_account_id") val bankAccountId: String? = null,
+    @SerializedName("receipt_url") val receiptUrl: String? = null
+)
+
+// ── Site Cash: Bank Accounts ──
+
+data class BankAccount(
+    val id: String,
+    @SerializedName("site_bu_id") val siteBuId: String,
+    @SerializedName("account_name") val accountName: String,
+    @SerializedName("account_number") val accountNumber: String,
+    @SerializedName("account_holder_name") val accountHolderName: String? = null,
+    @SerializedName("bank_name") val bankName: String? = null,
+    val branch: String? = null,
+    @SerializedName("branch_code") val branchCode: String? = null,
+    val currency: String = "LKR",
+    @SerializedName("is_active") val isActive: Boolean = true,
+    @SerializedName("created_at") val createdAt: String? = null
+)
+
+data class CreateBankAccountRequest(
+    @SerializedName("site_bu_id") val siteBuId: String,
+    @SerializedName("account_name") val accountName: String,
+    @SerializedName("account_number") val accountNumber: String,
+    @SerializedName("account_holder_name") val accountHolderName: String? = null,
+    @SerializedName("bank_name") val bankName: String? = null,
+    val branch: String? = null,
+    @SerializedName("branch_code") val branchCode: String? = null,
+    val currency: String = "LKR"
+)
+
+data class UploadReceiptData(
+    val url: String,
+    @SerializedName("file_key") val fileKey: String? = null
 )
 
 data class AcknowledgeData(

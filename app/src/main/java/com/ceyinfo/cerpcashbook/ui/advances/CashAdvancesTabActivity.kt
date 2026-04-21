@@ -290,7 +290,7 @@ class CashAdvancesTabActivity : AppCompatActivity() {
                 android.graphics.Color.parseColor("#7C3AED"),
                 android.graphics.Color.parseColor("#DB2777"),
             )
-            (b.bgInitial.background as? GradientDrawable)?.mutate()?.setColor(palette[position % palette.size])
+            (b.bgInitial.background as? GradientDrawable)?.apply { mutate(); setColor(palette[position % palette.size]) }
 
             b.root.setOnClickListener { onClick(row) }
         }
@@ -324,7 +324,7 @@ class CashAdvancesTabActivity : AppCompatActivity() {
                 "cancelled" -> android.graphics.Color.parseColor("#DC2626")
                 else -> android.graphics.Color.parseColor("#6B7280")
             }
-            (b.tvStatus.background as? GradientDrawable)?.mutate()?.setColor(statusColor)
+            (b.tvStatus.background as? GradientDrawable)?.apply { mutate(); setColor(statusColor) }
 
             b.tvFrom.text = "From: " + listOfNotNull(a.disbursedFirstName, a.disbursedLastName)
                 .joinToString(" ").ifBlank { "—" }

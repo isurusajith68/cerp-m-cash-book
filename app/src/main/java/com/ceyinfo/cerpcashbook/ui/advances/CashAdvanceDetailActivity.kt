@@ -149,7 +149,7 @@ class CashAdvanceDetailActivity : AppCompatActivity() {
                 "cancelled" -> android.graphics.Color.parseColor("#DC2626")
                 else -> android.graphics.Color.parseColor("#6B7280")
             }
-            (b.tvStatus.background as? GradientDrawable)?.mutate()?.setColor(statusColor)
+            (b.tvStatus.background as? GradientDrawable)?.apply { mutate(); setColor(statusColor) }
 
             val counterparty = listOfNotNull(a.custodianFirstName, a.custodianLastName)
                 .joinToString(" ").ifBlank { "—" }

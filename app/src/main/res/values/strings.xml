@@ -40,6 +40,20 @@
     <string name="no_records">No records</string>
     <string name="balance_label">Balance</string>
 
+    <!-- Send Cash (Slice B additions) -->
+    <string name="method_of_transfer">Method of Transfer</string>
+    <string name="deposit_to_account">Deposit to Account</string>
+    <string name="add_bank_account">Add Bank Account</string>
+    <string name="attach_photo">Attach Photo</string>
+    <string name="remove_photo">Remove</string>
+    <string name="remarks">Remarks</string>
+    <string name="bank_name_hint">Bank Name</string>
+    <string name="branch_hint">Branch</string>
+    <string name="account_name_hint">Account Name</string>
+    <string name="account_number_hint">Account Number</string>
+    <string name="account_holder_hint">Account Holder Name</string>
+    <string name="uploading">Uploading…</string>
+
     <!-- Dashboard -->
     <string name="dashboard_title">Cash Book</string>
     <string name="send_cash">Send Cash</string>
