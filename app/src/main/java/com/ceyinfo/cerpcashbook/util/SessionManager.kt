@@ -3,6 +3,8 @@ package com.ceyinfo.cerpcashbook.util
 import android.content.Context
 import android.content.SharedPreferences
 import com.ceyinfo.cerpcashbook.data.model.CashSite
+import com.ceyinfo.cerpcashbook.data.model.EntityPermissions
+import com.ceyinfo.cerpcashbook.data.model.MyPermissionsData
 import com.google.gson.Gson
 import com.google.gson.reflect.TypeToken
 
@@ -24,6 +26,7 @@ class SessionManager(context: Context) {
         private const val KEY_CASH_ROLE = "cash_role"
         private const val KEY_CLERK_SITES = "clerk_sites"
         private const val KEY_CUSTODIAN_SITES = "custodian_sites"
+        private const val KEY_PERMISSIONS = "my_permissions"
     }
 
     var isLoggedIn: Boolean
@@ -81,6 +84,37 @@ class SessionManager(context: Context) {
         val json = prefs.getString(KEY_CUSTODIAN_SITES, null) ?: return emptyList()
         val type = object : TypeToken<List<CashSite>>() {}.type
         return gson.fromJson(json, type)
+    }
+
+    // ── Merged ACL permissions across all BUs/roles ──
+
+    fun savePermissions(perms: MyPermissionsData?) {
+        if (perms == null) prefs.edit().remove(KEY_PERMISSIONS).apply()
+        else prefs.edit().putString(KEY_PERMISSIONS, gson.toJson(perms)).apply()
+    }
+
+    fun getPermissions(): MyPermissionsData? {
+        val json = prefs.getString(KEY_PERMISSIONS, null) ?: return null
+        return runCatching { gson.fromJson(json, MyPermissionsData::class.java) }.getOrNull()
+    }
+
+    /** Convenience: per-entity gating without forcing every caller to null-check the map. */
+    fun entityPermissions(entityCode: String): EntityPermissions? =
+        getPermissions()?.entities?.get(entityCode)
+
+    /** True when the user can reach this entity at all (owner or unblocked role). */
+    fun isEntityAllowed(entityCode: String): Boolean {
+        val perms = getPermissions() ?: return false
+        if (perms.isOwner) return true
+        return perms.entities[entityCode]?.allowed == true
+    }
+
+    /** True when a specific action target_code is in the user's allowed list. */
+    fun canPerformAction(entityCode: String, actionCode: String): Boolean {
+        val perms = getPermissions() ?: return false
+        if (perms.isOwner) return true
+        val ent = perms.entities[entityCode] ?: return false
+        return ent.allowed && ent.allowedActions.contains(actionCode)
     }
 
     fun clearSession() {

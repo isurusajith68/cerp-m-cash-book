@@ -177,42 +177,45 @@ class BuSelectActivity : AppCompatActivity() {
         lifecycleScope.launch {
             try {
                 val api = ApiClient.getService(this@BuSelectActivity)
-                val response = api.getMyRole()
-                if (response.isSuccessful && response.body()?.success == true) {
-                    val roleData = response.body()!!.data!!
 
-                    // Save role to session
-                    session.cashRole = roleData.role
+                // /my-role is best-effort — we only use it to tag each BU with
+                // the user's cash role on that site (clerk / custodian / both)
+                // for the local badge. Users without any cash role still see
+                // their full BU list.
+                val roleData = runCatching { api.getMyRole() }
+                    .getOrNull()
+                    ?.takeIf { it.isSuccessful && it.body()?.success == true }
+                    ?.body()?.data
+                session.cashRole = roleData?.role
 
-                    // Merge clerk + custodian sites, track role per site
-                    val siteMap = mutableMapOf<String, BusinessUnit>()
+                val clerkIds = roleData?.clerkSites?.map { it.buId }?.toSet().orEmpty()
+                val custodianIds = roleData?.custodianSites?.map { it.buId }?.toSet().orEmpty()
 
-                    for (site in roleData.clerkSites) {
-                        siteMap[site.siteBuId] = BusinessUnit(
-                            id = site.siteBuId, name = site.siteName,
-                            code = site.code, level = site.level ?: "site",
-                            cashRole = "clerk"
-                        )
-                    }
-                    for (site in roleData.custodianSites) {
-                        val existing = siteMap[site.siteBuId]
-                        if (existing != null) {
-                            // Same site, both roles
-                            siteMap[site.siteBuId] = existing.copy(cashRole = "both")
-                        } else {
-                            siteMap[site.siteBuId] = BusinessUnit(
-                                id = site.siteBuId, name = site.siteName,
-                                code = site.code, level = site.level ?: "site",
-                                cashRole = "custodian"
-                            )
-                        }
-                    }
-
-                    val data = siteMap.values.sortedBy { it.name }
-                    allBusinessUnits = data
-                    setupLevelChips(data)
-                    applyFilters()
+                val permittedResp = api.getPermittedUnits()
+                if (!permittedResp.isSuccessful || permittedResp.body()?.success != true) {
+                    Toast.makeText(
+                        this@BuSelectActivity,
+                        permittedResp.body()?.message ?: "Failed to load business units",
+                        Toast.LENGTH_SHORT
+                    ).show()
+                    return@launch
                 }
+
+                val data = permittedResp.body()!!.data.orEmpty().map { bu ->
+                    val inClerk = bu.id in clerkIds
+                    val inCustodian = bu.id in custodianIds
+                    val role = when {
+                        inClerk && inCustodian -> "both"
+                        inClerk -> "clerk"
+                        inCustodian -> "custodian"
+                        else -> null
+                    }
+                    bu.copy(cashRole = role)
+                }.sortedWith(compareByDescending<BusinessUnit> { it.isPrimary }.thenBy { it.name })
+
+                allBusinessUnits = data
+                setupLevelChips(data)
+                applyFilters()
             } catch (e: Exception) {
                 Toast.makeText(this@BuSelectActivity, e.message, Toast.LENGTH_SHORT).show()
             } finally {
@@ -234,7 +237,9 @@ class BuSelectActivity : AppCompatActivity() {
                     val data = response.body()!!.data!!
                     session.businessUnitId = data.businessUnitId
                     session.businessUnitName = data.businessUnitName
-                    session.cashRole = bu.cashRole ?: session.cashRole
+                    // Overwrite — a BU with no cash role legitimately clears the badge
+                    // so the hub hides cash-advance / expense-voucher tiles.
+                    session.cashRole = bu.cashRole
 
                     // Return to existing Hub instance (don't stack a new one).
                     startActivity(Intent(this@BuSelectActivity, ModuleHubActivity::class.java)

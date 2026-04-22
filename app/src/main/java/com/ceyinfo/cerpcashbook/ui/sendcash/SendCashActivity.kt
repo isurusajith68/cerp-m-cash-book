@@ -1,11 +1,11 @@
 package com.ceyinfo.cerpcashbook.ui.sendcash
 
+import android.app.DatePickerDialog
 import android.net.Uri
 import android.os.Bundle
 import android.view.View
 import android.widget.AdapterView
 import android.widget.ArrayAdapter
-import android.widget.EditText
 import android.widget.Toast
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
@@ -15,7 +15,7 @@ import com.ceyinfo.cerpcashbook.R
 import com.ceyinfo.cerpcashbook.data.model.BankAccount
 import com.ceyinfo.cerpcashbook.data.model.CreateAdvanceRequest
 import com.ceyinfo.cerpcashbook.data.model.CreateBankAccountRequest
-import com.ceyinfo.cerpcashbook.data.model.Custodian
+import com.ceyinfo.cerpcashbook.data.model.ReachableCustodian
 import com.ceyinfo.cerpcashbook.data.remote.ApiClient
 import com.ceyinfo.cerpcashbook.databinding.ActivitySendCashBinding
 import com.ceyinfo.cerpcashbook.databinding.DialogCreateBankBinding
@@ -25,29 +25,56 @@ import kotlinx.coroutines.launch
 import okhttp3.MediaType.Companion.toMediaTypeOrNull
 import okhttp3.MultipartBody
 import okhttp3.RequestBody.Companion.toRequestBody
+import java.text.SimpleDateFormat
+import java.util.Calendar
+import java.util.Locale
+import java.util.TimeZone
 
+/**
+ * BU-agnostic cash disbursement form. Custodians come from
+ * `/site-cash/custodians/reachable` (one row per (custodian, site) pair the
+ * clerk can reach), so the form doesn't need a global BU selection. The site
+ * context is derived from the chosen custodian row.
+ *
+ * When launched from [CashAdvanceDetailActivity] in "person" mode the caller
+ * passes [EXTRA_CUSTODIAN_ID] (and optionally [EXTRA_SITE_BU_ID]) and the
+ * dropdown is filtered/locked to the matching rows. When launched in "site"
+ * mode the caller passes [EXTRA_SITE_BU_ID] only and the dropdown is filtered
+ * to that site's custodians.
+ */
 class SendCashActivity : AppCompatActivity() {
 
     private lateinit var binding: ActivitySendCashBinding
     private lateinit var session: SessionManager
 
-    private var custodians: List<Custodian> = emptyList()
+    private var allCustodians: List<ReachableCustodian> = emptyList()
+    private var visibleCustodians: List<ReachableCustodian> = emptyList()
     private var bankAccounts: List<BankAccount> = emptyList()
     private var receiptUrl: String? = null
 
-    // Photo picker — returns a content URI for an image chosen from gallery/photos.
-    // Uses ACTION_GET_CONTENT under the hood so it works on all Android versions
-    // without needing runtime READ permissions.
+    private val dateFmt = SimpleDateFormat("yyyy-MM-dd", Locale.US).apply {
+        timeZone = TimeZone.getDefault()
+    }
+    private val displayDateFmt = SimpleDateFormat("dd MMM yyyy", Locale.US)
+    private var selectedDateMs: Long = System.currentTimeMillis()
+
+    // Pre-filtering extras supplied when launched from a drill-down screen.
+    private var lockedCustodianId: String? = null
+    private var lockedSiteId: String? = null
+
     private val pickImage = registerForActivityResult(
         ActivityResultContracts.GetContent()
     ) { uri: Uri? ->
         if (uri != null) uploadReceipt(uri)
     }
 
-    // The TRANSFER_METHODS array's first entry maps to NULL on the server —
-    // "cash" is the implicit default, but we surface it explicitly in the UI.
     private val methodCodes = listOf("cash", "online", "cdm", "cheque", "counter")
     private val methodLabels = listOf("Cash", "Online Transfer", "CDM", "Cheque", "Counter")
+
+    companion object {
+        const val EXTRA_CUSTODIAN_ID = "custodian_id"
+        const val EXTRA_SITE_BU_ID = "site_bu_id"
+    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -58,15 +85,53 @@ class SendCashActivity : AppCompatActivity() {
         setContentView(binding.root)
         session = SessionManager(this)
 
+        lockedCustodianId = intent.getStringExtra(EXTRA_CUSTODIAN_ID)
+        lockedSiteId = intent.getStringExtra(EXTRA_SITE_BU_ID)
+
         binding.btnBack.setOnClickListener { finish() }
+        // ACL gate: refuse the form entirely if the user can't add cash advances.
+        if (!session.canPerformAction("cash_advance", "add")) {
+            showError("You don't have permission to send cash.")
+            binding.btnSend.isEnabled = false
+            binding.btnAddBank.isEnabled = false
+            binding.btnAttachPhoto.isEnabled = false
+            binding.btnPickDate.isEnabled = false
+            return
+        }
         binding.btnSend.setOnClickListener { sendCash() }
         binding.btnAddBank.setOnClickListener { showCreateBankDialog() }
         binding.btnAttachPhoto.setOnClickListener { pickImage.launch("image/*") }
         binding.btnRemovePhoto.setOnClickListener { clearReceipt() }
+        binding.btnPickDate.setOnClickListener { openDatePicker() }
 
+        renderDateButton()
         setupMethodSpinner()
         loadCustodians()
-        loadBankAccounts()
+    }
+
+    // ─── Date picker ───────────────────────────────────────────────────────
+
+    private fun openDatePicker() {
+        val cal = Calendar.getInstance().apply { timeInMillis = selectedDateMs }
+        DatePickerDialog(
+            this,
+            { _, year, month, day ->
+                cal.set(year, month, day, 0, 0, 0)
+                cal.set(Calendar.MILLISECOND, 0)
+                selectedDateMs = cal.timeInMillis
+                renderDateButton()
+            },
+            cal.get(Calendar.YEAR),
+            cal.get(Calendar.MONTH),
+            cal.get(Calendar.DAY_OF_MONTH),
+        ).apply {
+            // No future-dated disbursements
+            datePicker.maxDate = System.currentTimeMillis()
+        }.show()
+    }
+
+    private fun renderDateButton() {
+        binding.btnPickDate.text = displayDateFmt.format(selectedDateMs)
     }
 
     // ─── Dropdowns ─────────────────────────────────────────────────────────
@@ -77,40 +142,87 @@ class SendCashActivity : AppCompatActivity() {
         )
         binding.spinnerMethod.onItemSelectedListener = object : AdapterView.OnItemSelectedListener {
             override fun onItemSelected(parent: AdapterView<*>?, view: View?, position: Int, id: Long) {
-                // "cash" (index 0) hides the bank dropdown; anything else reveals it.
-                binding.rowBank.visibility = if (methodCodes[position] == "cash") View.GONE else View.VISIBLE
+                val isCash = methodCodes[position] == "cash"
+                binding.rowBank.visibility = if (isCash) View.GONE else View.VISIBLE
+                if (!isCash) loadBankAccountsForSelection()
             }
             override fun onNothingSelected(parent: AdapterView<*>?) {}
         }
     }
 
     private fun loadCustodians() {
-        val siteId = session.businessUnitId ?: return
         binding.progress.visibility = View.VISIBLE
-
         lifecycleScope.launch {
             try {
                 val api = ApiClient.getService(this@SendCashActivity)
-                val response = api.getSiteCustodians(siteId)
+                val response = api.getReachableCustodians()
                 if (response.isSuccessful && response.body()?.success == true) {
-                    custodians = response.body()!!.data!!
-                    val names = custodians.map {
-                        "${it.firstName} ${it.lastName} (Bal: ${String.format("%,.0f", it.balance)})"
-                    }
-                    binding.spinnerCustodian.adapter = ArrayAdapter(
-                        this@SendCashActivity, android.R.layout.simple_spinner_dropdown_item, names
-                    )
+                    allCustodians = response.body()?.data ?: emptyList()
+                    refreshCustodianDropdown()
+                } else {
+                    showError(response.body()?.message ?: "Failed to load custodians")
                 }
             } catch (e: Exception) {
-                Toast.makeText(this@SendCashActivity, e.message, Toast.LENGTH_SHORT).show()
+                showError(e.message ?: "Failed to load custodians")
             } finally {
                 binding.progress.visibility = View.GONE
             }
         }
     }
 
-    private fun loadBankAccounts() {
-        val siteId = session.businessUnitId ?: return
+    private fun refreshCustodianDropdown() {
+        // Apply locked filters when present (drill-down context).
+        visibleCustodians = allCustodians.filter { row ->
+            (lockedCustodianId == null || row.userId == lockedCustodianId) &&
+                (lockedSiteId == null || row.buId == lockedSiteId)
+        }
+
+        if (visibleCustodians.isEmpty()) {
+            showError("No custodians available to disburse to.")
+            binding.spinnerCustodian.visibility = View.GONE
+            binding.lblCustodian.visibility = View.GONE
+            binding.tvLockedContext.visibility = View.GONE
+            return
+        }
+
+        // If exactly one match (e.g. drill-down with one site), show as a
+        // locked context label instead of a spinner.
+        if (visibleCustodians.size == 1 &&
+            (lockedCustodianId != null || lockedSiteId != null)
+        ) {
+            val only = visibleCustodians.first()
+            binding.spinnerCustodian.visibility = View.GONE
+            binding.lblCustodian.visibility = View.GONE
+            binding.tvLockedContext.visibility = View.VISIBLE
+            binding.tvLockedContext.text = "${only.firstName} ${only.lastName} · ${only.buName}"
+        } else {
+            binding.tvLockedContext.visibility = View.GONE
+            binding.spinnerCustodian.visibility = View.VISIBLE
+            binding.lblCustodian.visibility = View.VISIBLE
+            val labels = visibleCustodians.map {
+                "${it.firstName} ${it.lastName} · ${it.buName} (Bal: ${"%,.0f".format(it.balance)})"
+            }
+            binding.spinnerCustodian.adapter = ArrayAdapter(
+                this, android.R.layout.simple_spinner_dropdown_item, labels
+            )
+        }
+
+        // If a non-cash method is already selected, banks need to refresh now
+        // that we know which site we're operating in.
+        if (binding.rowBank.visibility == View.VISIBLE) loadBankAccountsForSelection()
+    }
+
+    private fun selectedCustodian(): ReachableCustodian? {
+        if (visibleCustodians.isEmpty()) return null
+        if (visibleCustodians.size == 1) return visibleCustodians.first()
+        val idx = binding.spinnerCustodian.selectedItemPosition
+        return visibleCustodians.getOrNull(idx)
+    }
+
+    // ─── Bank accounts (per-site) ──────────────────────────────────────────
+
+    private fun loadBankAccountsForSelection() {
+        val siteId = selectedCustodian()?.buId ?: return
         lifecycleScope.launch {
             try {
                 val api = ApiClient.getService(this@SendCashActivity)
@@ -143,11 +255,17 @@ class SendCashActivity : AppCompatActivity() {
     // ─── Create Bank Dialog ────────────────────────────────────────────────
 
     private fun showCreateBankDialog() {
+        val siteId = selectedCustodian()?.buId
+        if (siteId == null) {
+            showError("Pick a custodian first so we know which site the bank account belongs to.")
+            return
+        }
+
         val dialogBinding = DialogCreateBankBinding.inflate(layoutInflater)
         val dialog = MaterialAlertDialogBuilder(this)
             .setTitle(R.string.add_bank_account)
             .setView(dialogBinding.root)
-            .setPositiveButton("Save", null) // override below so we can keep dialog open on validation error
+            .setPositiveButton("Save", null)
             .setNegativeButton(R.string.cancel, null)
             .create()
 
@@ -159,6 +277,7 @@ class SendCashActivity : AppCompatActivity() {
                 if (number.isEmpty()) { dialogBinding.etAccountNumber.error = "Required"; return@setOnClickListener }
 
                 createBankAccount(
+                    siteId = siteId,
                     accountName = name,
                     accountNumber = number,
                     bankName = dialogBinding.etBankName.text?.toEmptyOrNull(),
@@ -174,6 +293,7 @@ class SendCashActivity : AppCompatActivity() {
     private fun CharSequence.toEmptyOrNull(): String? = toString().trim().ifEmpty { null }
 
     private fun createBankAccount(
+        siteId: String,
         accountName: String,
         accountNumber: String,
         bankName: String?,
@@ -181,14 +301,13 @@ class SendCashActivity : AppCompatActivity() {
         holder: String?,
         onDone: () -> Unit,
     ) {
-        val siteId = session.businessUnitId ?: return
         setLoading(true)
         lifecycleScope.launch {
             try {
                 val api = ApiClient.getService(this@SendCashActivity)
                 val response = api.createBankAccount(
                     CreateBankAccountRequest(
-                        siteBuId = siteId,
+                        buId = siteId,
                         accountName = accountName,
                         accountNumber = accountNumber,
                         accountHolderName = holder,
@@ -218,14 +337,13 @@ class SendCashActivity : AppCompatActivity() {
     private fun uploadReceipt(uri: Uri) {
         val bytes = try {
             contentResolver.openInputStream(uri)?.use { it.readBytes() }
-        } catch (e: Exception) { null }
+        } catch (_: Exception) { null }
         if (bytes == null) {
             showError("Could not read the selected image")
             return
         }
         val mimeType = contentResolver.getType(uri) ?: "image/jpeg"
 
-        // Optimistically show the preview; if the upload fails we clear it.
         binding.ivPhotoPreview.setImageURI(uri)
         binding.ivPhotoPreview.visibility = View.VISIBLE
         binding.btnRemovePhoto.visibility = View.VISIBLE
@@ -266,10 +384,8 @@ class SendCashActivity : AppCompatActivity() {
     // ─── Submit ────────────────────────────────────────────────────────────
 
     private fun sendCash() {
-        val idx = binding.spinnerCustodian.selectedItemPosition
-        if (idx < 0 || custodians.isEmpty()) {
-            showError("Select a custodian")
-            return
+        val custodian = selectedCustodian() ?: run {
+            showError("Select a custodian"); return
         }
 
         val amountStr = binding.etAmount.text?.toString()?.trim().orEmpty()
@@ -291,23 +407,21 @@ class SendCashActivity : AppCompatActivity() {
             bankAccountId = bankAccounts[bankIdx].id
         }
 
-        val custodian = custodians[idx]
-        val siteId = session.businessUnitId ?: return
-
         setLoading(true)
         lifecycleScope.launch {
             try {
                 val api = ApiClient.getService(this@SendCashActivity)
                 val response = api.createCashAdvance(
                     CreateAdvanceRequest(
-                        siteBuId = siteId,
-                        custodianId = custodian.userId,
+                        buId = custodian.buId,
+                        recipientId = custodian.userId,
                         amount = amount,
                         referenceNo = binding.etReference.text?.toString()?.trim()?.ifEmpty { null },
                         description = binding.etDescription.text?.toString()?.trim()?.ifEmpty { null },
                         methodOfTransfer = method,
                         bankAccountId = bankAccountId,
                         receiptUrl = receiptUrl,
+                        advanceDate = dateFmt.format(selectedDateMs),
                     )
                 )
 

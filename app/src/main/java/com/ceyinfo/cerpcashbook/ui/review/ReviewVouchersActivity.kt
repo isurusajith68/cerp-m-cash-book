@@ -87,13 +87,13 @@ class ReviewVouchersActivity : AppCompatActivity() {
     }
 
     private fun loadVouchers() {
-        val siteId = session.businessUnitId ?: return
+
         binding.progress.visibility = View.VISIBLE
 
         lifecycleScope.launch {
             try {
                 val api = ApiClient.getService(this@ReviewVouchersActivity)
-                val response = api.getExpenseVouchers(siteBuId = siteId, status = currentStatus)
+                val response = api.getExpenseVouchers(buId = null, status = currentStatus)
                 if (response.isSuccessful) {
                     vouchers = (response.body()?.data ?: emptyList()).toMutableList()
                     binding.rvVouchers.adapter = VoucherAdapter()
@@ -163,7 +163,7 @@ class ReviewVouchersActivity : AppCompatActivity() {
             b.tvDescription.text = v.description
             b.tvCategory.text = v.category ?: ""
             b.tvDate.text = v.expenseDate.substring(0, 10)
-            b.tvCustodian.text = "${v.custodianFirstName ?: ""} ${v.custodianLastName ?: ""}"
+            b.tvCustodian.text = "${v.recipientFirstName ?: ""} ${v.recipientLastName ?: ""}"
 
             b.tvStatus.text = v.status.uppercase()
             val statusColor = when (v.status) {
@@ -176,8 +176,16 @@ class ReviewVouchersActivity : AppCompatActivity() {
                 ContextCompat.getColor(b.root.context, statusColor)
             )
 
-            if (v.status == "submitted") {
+            // ACL-gated buttons: only show what the current user is actually
+            // allowed to do per their merged permissions. A user with only
+            // `expense_voucher.approve` sees Approve but not Reject, etc.
+            val canApprove = session.canPerformAction("expense_voucher", "approve")
+            val canReject = session.canPerformAction("expense_voucher", "reject")
+
+            if (v.status == "submitted" && (canApprove || canReject)) {
                 b.actionButtons.visibility = View.VISIBLE
+                b.btnApprove.visibility = if (canApprove) View.VISIBLE else View.GONE
+                b.btnReject.visibility = if (canReject) View.VISIBLE else View.GONE
                 b.btnApprove.setOnClickListener { reviewVoucher(v.id, "approve", position) }
                 b.btnReject.setOnClickListener { reviewVoucher(v.id, "reject", position) }
             } else {

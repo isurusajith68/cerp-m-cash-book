@@ -15,12 +15,12 @@ import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
 import com.ceyinfo.cerpcashbook.R
 import com.ceyinfo.cerpcashbook.data.model.CashAdvance
+import com.ceyinfo.cerpcashbook.data.model.CashSite
+import com.ceyinfo.cerpcashbook.data.model.ReachableCustodian
 import com.ceyinfo.cerpcashbook.data.remote.ApiClient
 import com.ceyinfo.cerpcashbook.databinding.ActivityCashAdvancesBinding
 import com.ceyinfo.cerpcashbook.databinding.ItemAdvanceBinding
 import com.ceyinfo.cerpcashbook.databinding.ItemAdvanceGroupBinding
-import com.ceyinfo.cerpcashbook.ui.expense.SubmitExpenseActivity
-import com.ceyinfo.cerpcashbook.ui.sendcash.SendCashActivity
 import com.ceyinfo.cerpcashbook.util.SessionManager
 import com.google.android.material.chip.Chip
 import kotlinx.coroutines.launch
@@ -45,6 +45,8 @@ class CashAdvancesTabActivity : AppCompatActivity() {
     private var currentTab: Tab = Tab.ISSUES
     private var currentGroupMode: GroupMode = GroupMode.BY_PERSON
     private var allAdvances: List<CashAdvance> = emptyList()
+    private var reachableCustodians: List<ReachableCustodian> = emptyList()
+    private var accessibleSites: List<CashSite> = emptyList()
 
     private enum class Tab { ISSUES, RECEIVED }
     private enum class GroupMode { BY_PERSON, BY_SITE }
@@ -58,9 +60,12 @@ class CashAdvancesTabActivity : AppCompatActivity() {
         setContentView(binding.root)
         session = SessionManager(this)
 
-        // Default to Received for custodian-only users so the tab lands on their own data
-        val role = session.cashRole ?: "none"
-        currentTab = if (role == "custodian" && !session.isOwner) Tab.RECEIVED else Tab.ISSUES
+        // Default landing: if the user can submit expense vouchers but cannot
+        // disburse cash advances, land on Received (their primary action is
+        // adding their own bills). Anyone who can disburse lands on Issues.
+        val canDisburse = session.canPerformAction("cash_advance", "add")
+        val canSubmitBill = session.canPerformAction("expense_voucher", "add")
+        currentTab = if (!canDisburse && canSubmitBill) Tab.RECEIVED else Tab.ISSUES
 
         binding.btnBack.setOnClickListener { finish() }
         binding.rvList.layoutManager = LinearLayoutManager(this)
@@ -69,7 +74,6 @@ class CashAdvancesTabActivity : AppCompatActivity() {
 
         setupTabs()
         setupGroupChips()
-        setupAddButton()
         renderForCurrentTab()
         loadAdvances()
     }
@@ -142,53 +146,58 @@ class CashAdvancesTabActivity : AppCompatActivity() {
         }
     }
 
-    // ─── Sub-control visibility / Add button wiring ────────────────────────
+    // ─── Sub-control visibility ───────────────────────────────────────────
 
     private fun renderForCurrentTab() {
-        when (currentTab) {
-            Tab.ISSUES -> {
-                binding.groupModeChips.visibility = View.VISIBLE
-                binding.btnAdd.text = getString(R.string.add_new)
-            }
-            Tab.RECEIVED -> {
-                binding.groupModeChips.visibility = View.GONE
-                binding.btnAdd.text = getString(R.string.add_expense)
-            }
+        binding.groupModeChips.visibility = when (currentTab) {
+            Tab.ISSUES -> View.VISIBLE
+            Tab.RECEIVED -> View.GONE
         }
-    }
-
-    private fun setupAddButton() {
-        binding.btnAdd.setOnClickListener {
-            when (currentTab) {
-                Tab.ISSUES -> startActivity(Intent(this, SendCashActivity::class.java))
-                Tab.RECEIVED -> startActivity(Intent(this, SubmitExpenseActivity::class.java))
-            }
+        // Add Expense visible on Received only AND only when the user has the
+        // `expense_voucher.add` action allowed in their merged ACL.
+        val canAddExpense =
+            currentTab == Tab.RECEIVED && session.canPerformAction("expense_voucher", "add")
+        binding.btnAddExpense.visibility = if (canAddExpense) View.VISIBLE else View.GONE
+        binding.btnAddExpense.setOnClickListener {
+            startActivity(android.content.Intent(this, com.ceyinfo.cerpcashbook.ui.expense.SubmitExpenseActivity::class.java))
         }
     }
 
     // ─── Data load ─────────────────────────────────────────────────────────
 
+    /**
+     * Loads three master lists in parallel:
+     *   - advances (for counts / totals on each row)
+     *   - reachable custodians (master list for the "List view" rows)
+     *   - accessible sites (master list for the "BU view" rows)
+     *
+     * Custodians and sites drive the row set so a fresh person/BU still
+     * appears even before any cash has been disbursed to them.
+     */
     private fun loadAdvances() {
         binding.progress.visibility = View.VISIBLE
         lifecycleScope.launch {
             try {
                 val api = ApiClient.getService(this@CashAdvancesTabActivity)
-                // Scope by current site BU — backend filters the user's visible rows further.
-                val response = api.getCashAdvances(
-                    siteBuId = session.businessUnitId,
-                    page = 1,
-                    limit = 100,
-                )
-                if (response.isSuccessful && response.body()?.success == true) {
-                    allAdvances = response.body()?.data ?: emptyList()
-                    renderList()
-                } else {
-                    Toast.makeText(
-                        this@CashAdvancesTabActivity,
-                        response.body()?.message ?: "Failed to load advances",
-                        Toast.LENGTH_SHORT,
-                    ).show()
+
+                // /cash-advances accepts a null site filter → backend aggregates
+                // across every site the user can reach.
+                val advResp = api.getCashAdvances(buId = null, page = 1, limit = 200)
+                if (advResp.isSuccessful && advResp.body()?.success == true) {
+                    allAdvances = advResp.body()?.data ?: emptyList()
                 }
+
+                val custResp = api.getReachableCustodians()
+                if (custResp.isSuccessful && custResp.body()?.success == true) {
+                    reachableCustodians = custResp.body()?.data ?: emptyList()
+                }
+
+                val sitesResp = api.getMySites()
+                if (sitesResp.isSuccessful && sitesResp.body()?.success == true) {
+                    accessibleSites = sitesResp.body()?.data ?: emptyList()
+                }
+
+                renderList()
             } catch (e: Exception) {
                 Toast.makeText(this@CashAdvancesTabActivity, e.message, Toast.LENGTH_SHORT).show()
             } finally {
@@ -219,46 +228,62 @@ class CashAdvancesTabActivity : AppCompatActivity() {
     }
 
     private fun buildIssuesRows(): List<GroupRow> {
-        // Only include advances the current user disbursed (defensive — backend should already scope)
-        val myDisbursals = allAdvances.filter { it.disbursedBy == session.userId || session.isOwner }
+        // Backend already BU-scopes the advances list to the current user,
+        // so there's no need to re-filter by senderId / owner here.
+        val myDisbursals = allAdvances
+
         return when (currentGroupMode) {
-            GroupMode.BY_PERSON -> myDisbursals
-                .groupBy { it.custodianId }
-                .map { (custodianId, group) ->
-                    val sample = group.first()
+            GroupMode.BY_PERSON -> {
+                // One row per distinct custodian (a custodian assigned to
+                // multiple sites collapses into a single entry — drilling in
+                // surfaces all their advances across sites).
+                val advancesByPerson = myDisbursals.groupBy { it.recipientId }
+                reachableCustodians
+                    .distinctBy { it.userId }
+                    .map { c ->
+                        val group = advancesByPerson[c.userId].orEmpty()
+                        GroupRow(
+                            id = c.userId,
+                            name = listOf(c.firstName, c.lastName)
+                                .joinToString(" ").ifBlank { "Unknown" },
+                            count = group.size,
+                            total = group.sumOf { it.amount },
+                        )
+                    }
+                    .sortedBy { it.name.lowercase() }
+            }
+            GroupMode.BY_SITE -> {
+                val advancesBySite = myDisbursals.groupBy { it.buId }
+                accessibleSites.map { s ->
+                    val group = advancesBySite[s.buId].orEmpty()
                     GroupRow(
-                        id = custodianId,
-                        name = listOfNotNull(sample.custodianFirstName, sample.custodianLastName)
-                            .joinToString(" ").ifBlank { "Unknown" },
+                        id = s.buId,
+                        name = s.buName,
                         count = group.size,
                         total = group.sumOf { it.amount },
+                        level = s.level,
                     )
-                }
-                .sortedByDescending { it.total }
-            GroupMode.BY_SITE -> myDisbursals
-                .groupBy { it.siteBuId }
-                .map { (siteId, group) ->
-                    GroupRow(
-                        id = siteId,
-                        name = group.first().siteName ?: "Unknown site",
-                        count = group.size,
-                        total = group.sumOf { it.amount },
-                    )
-                }
-                .sortedByDescending { it.total }
+                }.sortedBy { it.name.lowercase() }
+            }
         }
     }
 
     private fun buildReceivedRows(): List<CashAdvance> {
         val myUserId = session.userId ?: return emptyList()
         return allAdvances
-            .filter { it.custodianId == myUserId }
+            .filter { it.recipientId == myUserId }
             .sortedByDescending { it.createdAt ?: "" }
     }
 
     // ─── Row models & adapters ─────────────────────────────────────────────
 
-    private data class GroupRow(val id: String, val name: String, val count: Int, val total: Double)
+    private data class GroupRow(
+        val id: String,
+        val name: String,
+        val count: Int,
+        val total: Double,
+        val level: String? = null, // Org/Division/Project/Site — only set in BY_SITE mode
+    )
 
     private class GroupAdapter(
         private val rows: List<GroupRow>,
@@ -282,6 +307,22 @@ class CashAdvancesTabActivity : AppCompatActivity() {
             b.tvInitial.text = row.name.firstOrNull()?.uppercase() ?: "?"
             b.tvCount.text = "${row.count} ${if (row.count == 1) "advance" else "advances"}"
             b.tvTotal.text = "LKR " + String.format(Locale.US, "%,.2f", row.total)
+
+            // Level badge — only meaningful in BY_SITE mode (org/division/project/site).
+            if (!row.level.isNullOrBlank()) {
+                b.tvLevel.visibility = View.VISIBLE
+                b.tvLevel.text = row.level
+                val levelColor = when (row.level.lowercase(Locale.US)) {
+                    "org", "organization" -> android.graphics.Color.parseColor("#1E3A8A")
+                    "division" -> android.graphics.Color.parseColor("#7C3AED")
+                    "project" -> android.graphics.Color.parseColor("#059669")
+                    "site"    -> android.graphics.Color.parseColor("#D97706")
+                    else      -> android.graphics.Color.parseColor("#6B7280")
+                }
+                (b.tvLevel.background as? GradientDrawable)?.apply { mutate(); setColor(levelColor) }
+            } else {
+                b.tvLevel.visibility = View.GONE
+            }
 
             val palette = intArrayOf(
                 android.graphics.Color.parseColor("#2563EB"),
@@ -326,7 +367,7 @@ class CashAdvancesTabActivity : AppCompatActivity() {
             }
             (b.tvStatus.background as? GradientDrawable)?.apply { mutate(); setColor(statusColor) }
 
-            b.tvFrom.text = "From: " + listOfNotNull(a.disbursedFirstName, a.disbursedLastName)
+            b.tvFrom.text = "From: " + listOfNotNull(a.senderFirstName, a.senderLastName)
                 .joinToString(" ").ifBlank { "—" }
 
             if (!a.description.isNullOrBlank()) {

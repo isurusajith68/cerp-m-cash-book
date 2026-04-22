@@ -45,6 +45,7 @@ data class BusinessUnit(
     val level: String? = null,
     @SerializedName("level_order") val levelOrder: Int? = null,
     @SerializedName("is_active") val isActive: Boolean? = null,
+    @SerializedName("is_primary") val isPrimary: Boolean = false,
     val cashRole: String? = null  // "clerk" | "custodian" | "both" — local field, not from API
 )
 
@@ -84,10 +85,41 @@ data class MyRoleData(
 )
 
 data class CashSite(
-    @SerializedName("site_bu_id") val siteBuId: String,
-    @SerializedName("site_name") val siteName: String,
+    @SerializedName("bu_id") val buId: String,
+    @SerializedName("bu_name") val buName: String,
     val code: String? = null,
     val level: String? = null
+)
+
+// ── Site Cash: Permissions (merged ACL across all BUs/roles) ──
+
+data class MyPermissionsData(
+    @SerializedName("is_owner") val isOwner: Boolean = false,
+    val entities: Map<String, EntityPermissions> = emptyMap()
+)
+
+data class EntityPermissions(
+    val allowed: Boolean = false,
+    @SerializedName("entity_blocked") val entityBlocked: Boolean = false,
+    @SerializedName("allowed_actions") val allowedActions: List<String> = emptyList(),
+    val permissions: List<AclPermissionRow> = emptyList(),
+    val transitions: List<AclTransitionRow> = emptyList()
+)
+
+data class AclPermissionRow(
+    @SerializedName("state_id") val stateId: String? = null,
+    @SerializedName("state_code") val stateCode: String? = null,
+    @SerializedName("access_type") val accessType: String,
+    @SerializedName("target_code") val targetCode: String,
+    val permission: String
+)
+
+data class AclTransitionRow(
+    @SerializedName("from_state_code") val fromStateCode: String? = null,
+    @SerializedName("to_state_code") val toStateCode: String,
+    @SerializedName("transition_code") val transitionCode: String,
+    @SerializedName("transition_name") val transitionName: String,
+    @SerializedName("action_icon") val actionIcon: String? = null
 )
 
 // ── Site Cash: Custodians ──
@@ -97,6 +129,24 @@ data class Custodian(
     @SerializedName("first_name") val firstName: String,
     @SerializedName("last_name") val lastName: String,
     val email: String? = null,
+    val balance: Double = 0.0,
+    @SerializedName("last_txn_at") val lastTxnAt: String? = null
+)
+
+/**
+ * One row per (custodian, site) pair the current clerk can disburse to.
+ * Returned by `GET /site-cash/custodians/reachable` — a custodian assigned
+ * to multiple sites appears multiple times, each row carrying its own
+ * site context.
+ */
+data class ReachableCustodian(
+    @SerializedName("user_id") val userId: String,
+    @SerializedName("first_name") val firstName: String,
+    @SerializedName("last_name") val lastName: String,
+    val email: String? = null,
+    @SerializedName("bu_id") val buId: String,
+    @SerializedName("bu_name") val buName: String,
+    @SerializedName("bu_level") val buLevel: String? = null,
     val balance: Double = 0.0,
     @SerializedName("last_txn_at") val lastTxnAt: String? = null
 )
@@ -114,9 +164,9 @@ data class CustodianBalance(
 
 data class CashAdvance(
     val id: String,
-    @SerializedName("site_bu_id") val siteBuId: String,
-    @SerializedName("custodian_id") val custodianId: String,
-    @SerializedName("disbursed_by") val disbursedBy: String,
+    @SerializedName("bu_id") val buId: String,
+    @SerializedName("recipient_id") val recipientId: String,
+    @SerializedName("sender_id") val senderId: String,
     val amount: Double,
     val currency: String = "LKR",
     @SerializedName("reference_no") val referenceNo: String? = null,
@@ -124,11 +174,11 @@ data class CashAdvance(
     val status: String,
     @SerializedName("acknowledged_at") val acknowledgedAt: String? = null,
     @SerializedName("created_at") val createdAt: String? = null,
-    @SerializedName("custodian_first_name") val custodianFirstName: String? = null,
-    @SerializedName("custodian_last_name") val custodianLastName: String? = null,
-    @SerializedName("disbursed_first_name") val disbursedFirstName: String? = null,
-    @SerializedName("disbursed_last_name") val disbursedLastName: String? = null,
-    @SerializedName("site_name") val siteName: String? = null,
+    @SerializedName("recipient_first_name") val recipientFirstName: String? = null,
+    @SerializedName("recipient_last_name") val recipientLastName: String? = null,
+    @SerializedName("sender_first_name") val senderFirstName: String? = null,
+    @SerializedName("sender_last_name") val senderLastName: String? = null,
+    @SerializedName("bu_name") val buName: String? = null,
     @SerializedName("method_of_transfer") val methodOfTransfer: String? = null,
     @SerializedName("bank_account_id") val bankAccountId: String? = null,
     @SerializedName("bank_account_name") val bankAccountName: String? = null,
@@ -138,22 +188,23 @@ data class CashAdvance(
 )
 
 data class CreateAdvanceRequest(
-    @SerializedName("site_bu_id") val siteBuId: String,
-    @SerializedName("custodian_id") val custodianId: String,
+    @SerializedName("bu_id") val buId: String,
+    @SerializedName("recipient_id") val recipientId: String,
     val amount: Double,
     val currency: String = "LKR",
     @SerializedName("reference_no") val referenceNo: String? = null,
     val description: String? = null,
     @SerializedName("method_of_transfer") val methodOfTransfer: String? = null,
     @SerializedName("bank_account_id") val bankAccountId: String? = null,
-    @SerializedName("receipt_url") val receiptUrl: String? = null
+    @SerializedName("receipt_url") val receiptUrl: String? = null,
+    @SerializedName("advance_date") val advanceDate: String? = null
 )
 
 // ── Site Cash: Bank Accounts ──
 
 data class BankAccount(
     val id: String,
-    @SerializedName("site_bu_id") val siteBuId: String,
+    @SerializedName("bu_id") val buId: String,
     @SerializedName("account_name") val accountName: String,
     @SerializedName("account_number") val accountNumber: String,
     @SerializedName("account_holder_name") val accountHolderName: String? = null,
@@ -166,7 +217,7 @@ data class BankAccount(
 )
 
 data class CreateBankAccountRequest(
-    @SerializedName("site_bu_id") val siteBuId: String,
+    @SerializedName("bu_id") val buId: String,
     @SerializedName("account_name") val accountName: String,
     @SerializedName("account_number") val accountNumber: String,
     @SerializedName("account_holder_name") val accountHolderName: String? = null,
@@ -190,8 +241,8 @@ data class AcknowledgeData(
 data class ExpenseVoucher(
     val id: String,
     @SerializedName("voucher_no") val voucherNo: String,
-    @SerializedName("site_bu_id") val siteBuId: String,
-    @SerializedName("custodian_id") val custodianId: String,
+    @SerializedName("bu_id") val buId: String,
+    @SerializedName("recipient_id") val recipientId: String,
     @SerializedName("expense_date") val expenseDate: String,
     val category: String? = null,
     val description: String,
@@ -203,13 +254,13 @@ data class ExpenseVoucher(
     @SerializedName("reviewed_at") val reviewedAt: String? = null,
     @SerializedName("rejection_reason") val rejectionReason: String? = null,
     @SerializedName("created_at") val createdAt: String? = null,
-    @SerializedName("custodian_first_name") val custodianFirstName: String? = null,
-    @SerializedName("custodian_last_name") val custodianLastName: String? = null,
-    @SerializedName("site_name") val siteName: String? = null
+    @SerializedName("recipient_first_name") val recipientFirstName: String? = null,
+    @SerializedName("recipient_last_name") val recipientLastName: String? = null,
+    @SerializedName("bu_name") val buName: String? = null
 )
 
 data class CreateVoucherRequest(
-    @SerializedName("site_bu_id") val siteBuId: String,
+    @SerializedName("bu_id") val buId: String,
     @SerializedName("expense_date") val expenseDate: String,
     val category: String? = null,
     val description: String,
@@ -234,9 +285,9 @@ data class LedgerEntry(
     @SerializedName("running_balance") val runningBalance: Double,
     val description: String? = null,
     @SerializedName("created_at") val createdAt: String? = null,
-    @SerializedName("custodian_first_name") val custodianFirstName: String? = null,
-    @SerializedName("custodian_last_name") val custodianLastName: String? = null,
-    @SerializedName("site_name") val siteName: String? = null
+    @SerializedName("recipient_first_name") val recipientFirstName: String? = null,
+    @SerializedName("recipient_last_name") val recipientLastName: String? = null,
+    @SerializedName("bu_name") val buName: String? = null
 )
 
 // ── Site Cash: Notifications ──
@@ -245,7 +296,7 @@ data class CashNotification(
     val id: String,
     @SerializedName("recipient_id") val recipientId: String,
     @SerializedName("sender_id") val senderId: String? = null,
-    @SerializedName("site_bu_id") val siteBuId: String,
+    @SerializedName("bu_id") val buId: String,
     val type: String,
     @SerializedName("reference_id") val referenceId: String,
     @SerializedName("reference_type") val referenceType: String,
@@ -255,7 +306,7 @@ data class CashNotification(
     @SerializedName("created_at") val createdAt: String? = null,
     @SerializedName("sender_first_name") val senderFirstName: String? = null,
     @SerializedName("sender_last_name") val senderLastName: String? = null,
-    @SerializedName("site_name") val siteName: String? = null
+    @SerializedName("bu_name") val buName: String? = null
 )
 
 data class NotificationResponse(

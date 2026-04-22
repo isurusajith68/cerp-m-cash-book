@@ -48,10 +48,33 @@
             android:orientation="vertical"
             android:padding="20dp">
 
-            <!-- Select Custodian -->
+            <!-- Date -->
             <TextView
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
+                android:text="Date"
+                android:textColor="@color/on_surface"
+                android:textSize="14sp"
+                android:textStyle="bold" />
+
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/btn_pick_date"
+                style="@style/Widget.Material3.Button.OutlinedButton"
+                android:layout_width="match_parent"
+                android:layout_height="52dp"
+                android:layout_marginTop="8dp"
+                android:gravity="start|center_vertical"
+                android:paddingHorizontal="16dp"
+                android:textAllCaps="false"
+                android:textSize="15sp"
+                app:cornerRadius="12dp" />
+
+            <!-- Select Custodian -->
+            <TextView
+                android:id="@+id/lbl_custodian"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="20dp"
                 android:text="Select Custodian"
                 android:textColor="@color/on_surface"
                 android:textSize="14sp"
@@ -64,6 +87,18 @@
                 android:layout_marginTop="8dp"
                 android:background="@drawable/bg_login_card"
                 android:padding="12dp" />
+
+            <!-- Locked custodian / site context (when launched from a drill-down) -->
+            <TextView
+                android:id="@+id/tv_locked_context"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="8dp"
+                android:background="@drawable/bg_login_card"
+                android:padding="12dp"
+                android:textColor="@color/on_surface"
+                android:textSize="14sp"
+                android:visibility="gone" />
 
             <!-- Amount -->
             <com.google.android.material.textfield.TextInputLayout

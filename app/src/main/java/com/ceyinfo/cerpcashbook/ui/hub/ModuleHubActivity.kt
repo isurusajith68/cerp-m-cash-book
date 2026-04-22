@@ -21,7 +21,6 @@ import android.widget.Toast
 import com.ceyinfo.cerpcashbook.data.remote.ApiClient
 import com.ceyinfo.cerpcashbook.databinding.ActivityModuleHubBinding
 import com.ceyinfo.cerpcashbook.ui.advances.CashAdvancesTabActivity
-import com.ceyinfo.cerpcashbook.ui.buselect.BuSelectActivity
 import com.ceyinfo.cerpcashbook.ui.ledger.LedgerActivity
 import com.ceyinfo.cerpcashbook.ui.login.LoginActivity
 import com.ceyinfo.cerpcashbook.ui.notifications.NotificationsActivity
@@ -32,8 +31,8 @@ import com.google.android.material.card.MaterialCardView
 import kotlinx.coroutines.launch
 
 /**
- * Landing screen shown after BU selection. Presents finance modules as tiles,
- * gated by the user's cash role and owner flag.
+ * Landing screen shown after login. Presents finance modules as tiles, gated
+ * by the user's aggregated cash role across all assigned BUs.
  */
 class ModuleHubActivity : AppCompatActivity() {
 
@@ -71,47 +70,56 @@ class ModuleHubActivity : AppCompatActivity() {
 
         binding.swipeRefresh.setOnRefreshListener {
             loadNotifBadge()
-            binding.swipeRefresh.isRefreshing = false
+            refreshPermissionsAndTiles {
+                binding.swipeRefresh.isRefreshing = false
+            }
         }
         binding.swipeRefresh.setColorSchemeResources(R.color.primary)
     }
 
     override fun onResume() {
         super.onResume()
-        // BU / role may have changed (user returned from BuSelectActivity), so rebuild
-        // header and tiles. Notifications badge also refreshes.
+        // Role / permissions may have changed since last open — refresh from
+        // the server, then rebuild tiles + badge with the fresh ACL.
         setupHeader()
-        buildModuleTiles()
         loadNotifBadge()
+        refreshPermissionsAndTiles()
+    }
+
+    /**
+     * Refresh `/my-permissions` + `/my-role` and rebuild the tile grid. Tiles
+     * render immediately from cached ACL so the user sees something instantly;
+     * once the network call returns we cache the fresh data and re-render.
+     * `onDone` fires whether the refresh succeeded or failed — used by
+     * pull-to-refresh to dismiss its spinner.
+     */
+    private fun refreshPermissionsAndTiles(onDone: (() -> Unit)? = null) {
+        buildModuleTiles()
+        lifecycleScope.launch {
+            try {
+                val api = ApiClient.getService(this@ModuleHubActivity)
+                val perms = api.getMyPermissions()
+                if (perms.isSuccessful && perms.body()?.success == true) {
+                    session.savePermissions(perms.body()?.data)
+                    val role = api.getMyRole()
+                    if (role.isSuccessful && role.body()?.success == true) {
+                        session.cashRole = role.body()?.data?.role
+                    }
+                    buildModuleTiles()
+                }
+            } catch (_: Exception) {
+                // Silent — cached ACL still drives the UI.
+            } finally {
+                onDone?.invoke()
+            }
+        }
     }
 
     private fun setupHeader() {
-        binding.tvBuName.text = session.businessUnitName ?: "No Site"
+        // Hub is BU-agnostic: header shows the app title, not a per-BU name.
+        binding.tvBuName.text = getString(R.string.app_name)
         binding.tvUserEmail.text = session.email
         binding.tvAvatar.text = session.email?.firstOrNull()?.uppercase() ?: "U"
-
-        val role = session.cashRole ?: "none"
-        val roleText = when {
-            session.isOwner -> "OWNER"
-            role == "clerk" -> "CLERK"
-            role == "custodian" -> "CUSTODIAN"
-            role == "both" -> "CLERK + CUSTODIAN"
-            else -> "NO ROLE"
-        }
-        val roleColor = when {
-            session.isOwner -> R.color.success
-            role == "clerk" -> R.color.info
-            role == "custodian" -> R.color.warning
-            role == "both" -> R.color.success
-            else -> R.color.primary
-        }
-        binding.tvRoleBadge.text = roleText
-        (binding.tvRoleBadge.background as? GradientDrawable)
-            ?.setColor(ContextCompat.getColor(this, roleColor))
-
-        binding.btnChangeBu.setOnClickListener {
-            startActivity(Intent(this, BuSelectActivity::class.java))
-        }
     }
 
     private fun buildModuleTiles() {
@@ -119,21 +127,23 @@ class ModuleHubActivity : AppCompatActivity() {
         binding.row2.removeAllViews()
         binding.row3.removeAllViews()
 
-        // 5 entity tiles per the design mockup (permission-gating placeholder — all roles
-        // see all tiles; Banks / Petty Cash / Cashbook are stubs until backend exists).
-        // Layout: row1 = Cash Advance + Banks, row2 = Petty Cash + Cashbook, row3 = Expense Vouchers.
+        val canCashAdvance = session.isEntityAllowed("cash_advance")
+        val canExpenseVoucher = session.isEntityAllowed("expense_voucher")
+        
 
-        binding.row1.addView(
-            makeTile(
-                title = getString(R.string.module_cash_advance),
-                subtitle = getString(R.string.module_cash_advance_desc),
-                iconRes = R.drawable.ic_send_cash,
-                bgTint = "#DBEAFE",
-                iconTint = "#2563EB",
-            ) {
-                startActivity(Intent(this, CashAdvancesTabActivity::class.java))
-            }
-        )
+        if (canCashAdvance) {
+            binding.row1.addView(
+                makeTile(
+                    title = getString(R.string.module_cash_advance),
+                    subtitle = getString(R.string.module_cash_advance_desc),
+                    iconRes = R.drawable.ic_send_cash,
+                    bgTint = "#DBEAFE",
+                    iconTint = "#2563EB",
+                ) {
+                    startActivity(Intent(this, CashAdvancesTabActivity::class.java))
+                }
+            )
+        }
         binding.row1.addView(makeComingSoonTile(
             title = getString(R.string.module_banks),
             subtitle = getString(R.string.module_banks_desc),
@@ -157,19 +167,22 @@ class ModuleHubActivity : AppCompatActivity() {
             iconTint = "#7C3AED",
         ))
 
-        binding.row3.addView(
-            makeTile(
-                title = getString(R.string.module_expense_vouchers),
-                subtitle = getString(R.string.module_expense_vouchers_desc),
-                iconRes = R.drawable.ic_review,
-                bgTint = "#FCE7F3",
-                iconTint = "#DB2777",
-            ) {
-                startActivity(Intent(this, ReviewVouchersActivity::class.java))
-            }
-        )
-        // Row 3 has a single tile; pad with spacer so it doesn't stretch full width.
-        binding.row3.addView(makeSpacerTile())
+        if (canExpenseVoucher) {
+            binding.row3.visibility = View.VISIBLE
+            binding.row3.addView(
+                makeTile(
+                    title = getString(R.string.module_expense_vouchers),
+                    subtitle = getString(R.string.module_expense_vouchers_desc),
+                    iconRes = R.drawable.ic_review,
+                    bgTint = "#FCE7F3",
+                    iconTint = "#DB2777",
+                ) {
+                    startActivity(Intent(this, ReviewVouchersActivity::class.java))
+                }
+            )
+        } else {
+            binding.row3.visibility = View.GONE
+        }
     }
 
     private fun makeComingSoonTile(
@@ -252,17 +265,6 @@ class ModuleHubActivity : AppCompatActivity() {
         return card
     }
 
-    /** Invisible placeholder so a single tile in a row doesn't stretch to full width. */
-    private fun makeSpacerTile(): View {
-        val dp = resources.displayMetrics.density
-        return View(this).apply {
-            layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.MATCH_PARENT, 1f).apply {
-                marginStart = (6 * dp).toInt()
-                marginEnd = (6 * dp).toInt()
-            }
-        }
-    }
-
     private fun setupBottomNav() {
         binding.navHome.setOnClickListener { /* already home */ }
         binding.navNotifications.setOnClickListener {
@@ -277,12 +279,12 @@ class ModuleHubActivity : AppCompatActivity() {
     }
 
     private fun loadNotifBadge() {
-        val siteId = session.businessUnitId ?: return
-
+        // Aggregated across every site the user can reach — backend handles it
+        // when site_bu_id is omitted.
         lifecycleScope.launch {
             try {
                 val api = ApiClient.getService(this@ModuleHubActivity)
-                val response = api.getDashboardStats(siteId)
+                val response = api.getDashboardStats()
                 if (response.isSuccessful && response.body()?.success == true) {
                     val stats = response.body()!!.data!!
                     if (stats.unreadNotifications > 0) {

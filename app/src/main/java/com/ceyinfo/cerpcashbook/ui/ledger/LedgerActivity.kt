@@ -43,33 +43,31 @@ class LedgerActivity : AppCompatActivity() {
     }
 
     private fun loadLedger() {
-        val siteId = session.businessUnitId ?: return
+        // BU-agnostic: backend unions across reachable BUs when site_bu_id is
+        // omitted. We aggregate the balance summary client-side from the
+        // returned entries so it reflects all BUs at once instead of one.
         binding.progress.visibility = View.VISIBLE
 
         lifecycleScope.launch {
             try {
                 val api = ApiClient.getService(this@LedgerActivity)
 
-                // Load balance summary
-                val role = session.cashRole
-                val custodianId = if (role == "custodian") session.userId else null
-                val balResponse = if (custodianId != null) {
-                    api.getCustodianBalance(custodianId, siteId)
-                } else null
-
-                if (balResponse?.isSuccessful == true && balResponse.body()?.success == true) {
-                    val bal = balResponse.body()!!.data!!
-                    binding.tvTotalReceived.text = "LKR ${String.format("%,.2f", bal.totalReceived)}"
-                    binding.tvTotalSpent.text = "LKR ${String.format("%,.2f", bal.totalSpent)}"
-                    binding.tvBalance.text = "LKR ${String.format("%,.2f", bal.balance)}"
-                }
-
-                // Load ledger entries
-                val response = api.getLedger(siteBuId = siteId, custodianId = custodianId, limit = 50)
+                // BU-agnostic: backend already scopes ledger rows to the
+                // current user (assigned BUs ∪ rows where I'm the custodian).
+                // No client-side role-based filtering needed.
+                val response = api.getLedger(buId = null, recipientId = null, limit = 100)
                 if (response.isSuccessful) {
                     val entries = response.body()?.data ?: emptyList()
                     binding.rvLedger.adapter = LedgerAdapter(entries)
                     binding.tvEmpty.visibility = if (entries.isEmpty()) View.VISIBLE else View.GONE
+
+                    // Aggregate summary across all returned rows so the cards
+                    // reflect every reachable BU at once, not a single site.
+                    val received = entries.sumOf { it.debit }
+                    val spent = entries.sumOf { it.credit }
+                    binding.tvTotalReceived.text = "LKR ${String.format("%,.2f", received)}"
+                    binding.tvTotalSpent.text = "LKR ${String.format("%,.2f", spent)}"
+                    binding.tvBalance.text = "LKR ${String.format("%,.2f", received - spent)}"
                 }
             } catch (e: Exception) {
                 Toast.makeText(this@LedgerActivity, e.message, Toast.LENGTH_SHORT).show()

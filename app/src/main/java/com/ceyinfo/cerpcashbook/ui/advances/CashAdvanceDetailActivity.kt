@@ -57,8 +57,23 @@ class CashAdvanceDetailActivity : AppCompatActivity() {
 
         binding.tvTitle.text = displayName
         binding.btnBack.setOnClickListener { finish() }
-        binding.btnAddNew.setOnClickListener {
-            startActivity(Intent(this, SendCashActivity::class.java))
+
+        // Gate Add New on the merged ACL — only users with cash_advance.add
+        // see the button. Hides for read-only viewers (ledger watchers, etc.).
+        if (session.canPerformAction("cash_advance", "add")) {
+            binding.btnAddNew.visibility = View.VISIBLE
+            binding.btnAddNew.setOnClickListener {
+                // Carry drill-down context into the form: "person" mode pins
+                // the custodian; "site" mode pins the site.
+                val intent = Intent(this, SendCashActivity::class.java)
+                when (mode) {
+                    "person" -> intent.putExtra(SendCashActivity.EXTRA_CUSTODIAN_ID, filterId)
+                    "site"   -> intent.putExtra(SendCashActivity.EXTRA_SITE_BU_ID, filterId)
+                }
+                startActivity(intent)
+            }
+        } else {
+            binding.btnAddNew.visibility = View.GONE
         }
         binding.rvList.layoutManager = LinearLayoutManager(this)
         binding.swipeRefresh.setOnRefreshListener { loadTransactions() }
@@ -78,26 +93,22 @@ class CashAdvanceDetailActivity : AppCompatActivity() {
         lifecycleScope.launch {
             try {
                 val api = ApiClient.getService(this@CashAdvanceDetailActivity)
+                // BU-agnostic: backend handles BU scoping per current user.
                 val response = when (mode) {
                     "person" -> api.getCashAdvances(
-                        siteBuId = session.businessUnitId,
-                        custodianId = filterId,
+                        buId = null,
+                        recipientId = filterId,
                         page = 1, limit = 100,
                     )
                     else -> api.getCashAdvances(
-                        siteBuId = filterId,
+                        buId = filterId,
                         page = 1, limit = 100,
                     )
                 }
                 if (response.isSuccessful && response.body()?.success == true) {
-                    val data = response.body()?.data ?: emptyList()
-                    // When scoping by person we still filter to rows the current user disbursed (owners see all)
-                    val filtered = if (mode == "person") {
-                        data.filter { it.disbursedBy == session.userId || session.isOwner }
-                    } else {
-                        data.filter { it.disbursedBy == session.userId || session.isOwner }
-                    }
-                    renderList(filtered)
+                    // No client-side senderId/owner filter — visibility is
+                    // already enforced by the backend's BU-scoping.
+                    renderList(response.body()?.data ?: emptyList())
                 } else {
                     Toast.makeText(
                         this@CashAdvanceDetailActivity,
@@ -151,7 +162,7 @@ class CashAdvanceDetailActivity : AppCompatActivity() {
             }
             (b.tvStatus.background as? GradientDrawable)?.apply { mutate(); setColor(statusColor) }
 
-            val counterparty = listOfNotNull(a.custodianFirstName, a.custodianLastName)
+            val counterparty = listOfNotNull(a.recipientFirstName, a.recipientLastName)
                 .joinToString(" ").ifBlank { "—" }
             b.tvFrom.text = "To: $counterparty"
 

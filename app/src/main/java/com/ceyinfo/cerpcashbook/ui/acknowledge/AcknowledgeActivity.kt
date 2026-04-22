@@ -44,13 +44,15 @@ class AcknowledgeActivity : AppCompatActivity() {
     }
 
     private fun loadAdvances() {
-        val siteId = session.businessUnitId ?: return
+        // BU-agnostic: backend filters to advances on BUs the user can reach
+        // OR ones they personally received (custodian_id = me). Pass null
+        // buId so the union kicks in.
         binding.progress.visibility = View.VISIBLE
 
         lifecycleScope.launch {
             try {
                 val api = ApiClient.getService(this@AcknowledgeActivity)
-                val response = api.getCashAdvances(siteBuId = siteId, custodianId = session.userId)
+                val response = api.getCashAdvances(buId = null, recipientId = session.userId)
                 if (response.isSuccessful) {
                     advances = (response.body()?.data ?: emptyList()).toMutableList()
                     binding.rvAdvances.adapter = AdvanceAdapter()
@@ -95,7 +97,7 @@ class AcknowledgeActivity : AppCompatActivity() {
             val b = holder.b
 
             b.tvAmount.text = "LKR ${String.format("%,.2f", adv.amount)}"
-            b.tvFrom.text = "From: ${adv.disbursedFirstName ?: ""} ${adv.disbursedLastName ?: ""}"
+            b.tvFrom.text = "From: ${adv.senderFirstName ?: ""} ${adv.senderLastName ?: ""}"
             b.tvDate.text = adv.createdAt?.substring(0, 10) ?: ""
 
             if (!adv.description.isNullOrEmpty()) {
@@ -116,8 +118,10 @@ class AcknowledgeActivity : AppCompatActivity() {
                 ContextCompat.getColor(b.root.context, statusColor)
             )
 
-            // Show acknowledge button only for pending
-            if (adv.status == "pending") {
+            // Show acknowledge button only for pending AND when the user has
+            // the cash_advance.acknowledge action allowed in their merged ACL.
+            val canAck = session.canPerformAction("cash_advance", "acknowledge")
+            if (adv.status == "pending" && canAck) {
                 b.btnAcknowledge.visibility = View.VISIBLE
                 b.btnAcknowledge.setOnClickListener { acknowledge(adv.id, position) }
             } else {

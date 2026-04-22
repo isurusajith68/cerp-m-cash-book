@@ -15,7 +15,6 @@ import androidx.recyclerview.widget.RecyclerView
 import com.ceyinfo.cerpcashbook.R
 import com.ceyinfo.cerpcashbook.data.model.LoginRequest
 import com.ceyinfo.cerpcashbook.data.model.Organization
-import com.ceyinfo.cerpcashbook.data.model.SelectUnitRequest
 import com.ceyinfo.cerpcashbook.data.remote.ApiClient
 import com.ceyinfo.cerpcashbook.databinding.ActivityLoginBinding
 import com.ceyinfo.cerpcashbook.databinding.ItemOrgBinding
@@ -43,18 +42,14 @@ class LoginActivity : AppCompatActivity() {
         session = SessionManager(this)
         networkMonitor = NetworkMonitor(this)
 
-        // Already logged in → go straight to the Module Hub. If a BU was never
-        // selected in this install, auto-pick the first available site so the user
-        // lands on a functional hub without seeing the BU picker.
+        // Already logged in → refresh the aggregated cash role and go to the
+        // hub. The hub is BU-agnostic now: it shows tiles based on the union of
+        // the user's permissions across every BU they're assigned to.
         if (session.isLoggedIn) {
-            if (session.businessUnitId != null) {
-                goToHub()
-            } else {
-                setLoading(true)
-                lifecycleScope.launch {
-                    autoSelectFirstBuThenGoToHub()
-                    setLoading(false)
-                }
+            setLoading(true)
+            lifecycleScope.launch {
+                refreshRoleThenGoToHub()
+                setLoading(false)
             }
             return
         }
@@ -112,10 +107,11 @@ class LoginActivity : AppCompatActivity() {
                     session.email = data.email
                     session.organizationId = data.organizationId
                     session.isOwner = data.isOwner
+                    // Hub is BU-agnostic: no select-unit call, no businessUnitId.
+                    session.businessUnitId = null
+                    session.businessUnitName = null
 
-                    // Auto-select first BU so the user lands on the Module Hub,
-                    // not a BU picker. They can change BU from the hub later.
-                    autoSelectFirstBuThenGoToHub()
+                    refreshRoleThenGoToHub()
                 } else {
                     val msg = response.body()?.message
                         ?: response.errorBody()?.string()
@@ -193,44 +189,28 @@ class LoginActivity : AppCompatActivity() {
     }
 
     /**
-     * Fetch the user's cash-role assignments, auto-select the first available site,
-     * and navigate to the Module Hub. If no sites are available (or the network
-     * fails), we still land on the hub — it handles the "No Site" empty state.
+     * Refresh both the aggregated cash role and the merged entity permissions
+     * across every BU the user is assigned to. Both come from the server
+     * unioned across the user's whole assignment tree — no BU selection
+     * needed on the client.
      */
-    private suspend fun autoSelectFirstBuThenGoToHub() {
+    private suspend fun refreshRoleThenGoToHub() {
         try {
             val api = ApiClient.getService(this@LoginActivity)
-            val roleResp = api.getMyRole()
-            if (roleResp.isSuccessful && roleResp.body()?.success == true) {
-                val roleData = roleResp.body()!!.data!!
-                session.cashRole = roleData.role
 
-                // Prefer a clerk site; fall back to a custodian site
-                val firstClerk = roleData.clerkSites.firstOrNull()
-                val firstCustodian = roleData.custodianSites.firstOrNull()
-                val chosen = firstClerk ?: firstCustodian
+            val roleData = runCatching { api.getMyRole() }
+                .getOrNull()
+                ?.takeIf { it.isSuccessful && it.body()?.success == true }
+                ?.body()?.data
+            session.cashRole = roleData?.role
 
-                if (chosen != null) {
-                    val selectResp = api.selectUnit(SelectUnitRequest(chosen.siteBuId))
-                    if (selectResp.isSuccessful && selectResp.body()?.success == true) {
-                        val sel = selectResp.body()!!.data!!
-                        session.businessUnitId = sel.businessUnitId
-                        session.businessUnitName = sel.businessUnitName
-
-                        // Derive the role specific to the chosen site
-                        val inClerk = roleData.clerkSites.any { it.siteBuId == chosen.siteBuId }
-                        val inCustodian = roleData.custodianSites.any { it.siteBuId == chosen.siteBuId }
-                        session.cashRole = when {
-                            inClerk && inCustodian -> "both"
-                            inClerk -> "clerk"
-                            inCustodian -> "custodian"
-                            else -> roleData.role
-                        }
-                    }
-                }
-            }
+            val perms = runCatching { api.getMyPermissions() }
+                .getOrNull()
+                ?.takeIf { it.isSuccessful && it.body()?.success == true }
+                ?.body()?.data
+            session.savePermissions(perms)
         } catch (_: Exception) {
-            // Non-fatal — the hub shows a "No Site" state and the user can tap "Change".
+            // Non-fatal — hub renders fine even if these calls fail (tiles hidden).
         }
         goToHub()
     }

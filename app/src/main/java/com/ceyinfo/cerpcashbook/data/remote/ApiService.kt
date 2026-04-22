@@ -27,6 +27,10 @@ interface ApiService {
     @GET("site-cash/my-role")
     suspend fun getMyRole(): Response<ApiResponse<MyRoleData>>
 
+    // ── Site Cash: Merged Permissions (all BUs + all roles) ───────────
+    @GET("site-cash/my-permissions")
+    suspend fun getMyPermissions(): Response<ApiResponse<MyPermissionsData>>
+
     // ── Site Cash: Sites & Custodians ─────────────────────────────────
     @GET("site-cash/sites/my-sites")
     suspend fun getMySites(): Response<ApiResponse<List<CashSite>>>
@@ -34,18 +38,22 @@ interface ApiService {
     @GET("site-cash/sites/{siteId}/custodians")
     suspend fun getSiteCustodians(@Path("siteId") siteId: String): Response<ApiResponse<List<Custodian>>>
 
+    // BU-agnostic: every (custodian, site) pair the current user can reach.
+    @GET("site-cash/custodians/reachable")
+    suspend fun getReachableCustodians(): Response<ApiResponse<List<ReachableCustodian>>>
+
     // ── Site Cash: Balance ────────────────────────────────────────────
     @GET("site-cash/custodians/{id}/balance")
     suspend fun getCustodianBalance(
-        @Path("id") custodianId: String,
-        @Query("site_bu_id") siteBuId: String
+        @Path("id") recipientId: String,
+        @Query("bu_id") buId: String
     ): Response<ApiResponse<CustodianBalance>>
 
     // ── Site Cash: Advances ───────────────────────────────────────────
     @GET("site-cash/cash-advances")
     suspend fun getCashAdvances(
-        @Query("site_bu_id") siteBuId: String? = null,
-        @Query("custodian_id") custodianId: String? = null,
+        @Query("bu_id") buId: String? = null,
+        @Query("recipient_id") recipientId: String? = null,
         @Query("status") status: String? = null,
         @Query("page") page: Int = 1,
         @Query("limit") limit: Int = 20
@@ -63,7 +71,7 @@ interface ApiService {
     // ── Site Cash: Bank Accounts ──────────────────────────────────────
     @GET("site-cash/bank-accounts")
     suspend fun getBankAccounts(
-        @Query("site_bu_id") siteBuId: String
+        @Query("bu_id") buId: String
     ): Response<ApiResponse<List<BankAccount>>>
 
     @POST("site-cash/bank-accounts")
@@ -79,8 +87,8 @@ interface ApiService {
     // ── Site Cash: Expense Vouchers ───────────────────────────────────
     @GET("site-cash/expense-vouchers")
     suspend fun getExpenseVouchers(
-        @Query("site_bu_id") siteBuId: String? = null,
-        @Query("custodian_id") custodianId: String? = null,
+        @Query("bu_id") buId: String? = null,
+        @Query("recipient_id") recipientId: String? = null,
         @Query("status") status: String? = null,
         @Query("search") search: String? = null,
         @Query("page") page: Int = 1,
@@ -99,8 +107,8 @@ interface ApiService {
     // ── Site Cash: Ledger ─────────────────────────────────────────────
     @GET("site-cash/ledger")
     suspend fun getLedger(
-        @Query("site_bu_id") siteBuId: String? = null,
-        @Query("custodian_id") custodianId: String? = null,
+        @Query("bu_id") buId: String? = null,
+        @Query("recipient_id") recipientId: String? = null,
         @Query("txn_type") txnType: String? = null,
         @Query("page") page: Int = 1,
         @Query("limit") limit: Int = 20
@@ -121,5 +129,7 @@ interface ApiService {
 
     // ── Site Cash: Dashboard ──────────────────────────────────────────
     @GET("site-cash/dashboard-stats")
-    suspend fun getDashboardStats(@Query("site_bu_id") siteBuId: String): Response<ApiResponse<DashboardStats>>
+    suspend fun getDashboardStats(
+        @Query("bu_id") buId: String? = null
+    ): Response<ApiResponse<DashboardStats>>
 }

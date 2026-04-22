@@ -74,31 +74,8 @@
                                 android:maxLines="1"
                                 android:textColor="@color/white"
                                 android:textSize="13sp" />
-
-                            <TextView
-                                android:id="@+id/tv_role_badge"
-                                android:layout_width="wrap_content"
-                                android:layout_height="wrap_content"
-                                android:layout_marginTop="4dp"
-                                android:background="@drawable/bg_level_badge"
-                                android:paddingHorizontal="10dp"
-                                android:paddingVertical="3dp"
-                                android:textAllCaps="true"
-                                android:textColor="@color/white"
-                                android:textSize="10sp"
-                                android:letterSpacing="0.08" />
                         </LinearLayout>
 
-                        <com.google.android.material.button.MaterialButton
-                            android:id="@+id/btn_change_bu"
-                            style="@style/Widget.Material3.Button.TextButton"
-                            android:layout_width="wrap_content"
-                            android:layout_height="36dp"
-                            android:minWidth="0dp"
-                            android:paddingHorizontal="10dp"
-                            android:text="Change"
-                            android:textColor="#90A4AE"
-                            android:textSize="11sp" />
                     </LinearLayout>
 
                     <!-- BU name + subtitle -->
@@ -142,21 +119,24 @@
                             android:id="@+id/row1"
                             android:layout_width="match_parent"
                             android:layout_height="wrap_content"
-                            android:orientation="horizontal" />
+                            android:orientation="horizontal"
+                            android:weightSum="2" />
 
                         <LinearLayout
                             android:id="@+id/row2"
                             android:layout_width="match_parent"
                             android:layout_height="wrap_content"
                             android:layout_marginTop="12dp"
-                            android:orientation="horizontal" />
+                            android:orientation="horizontal"
+                            android:weightSum="2" />
 
                         <LinearLayout
                             android:id="@+id/row3"
                             android:layout_width="match_parent"
                             android:layout_height="wrap_content"
                             android:layout_marginTop="12dp"
-                            android:orientation="horizontal" />
+                            android:orientation="horizontal"
+                            android:weightSum="2" />
                     </LinearLayout>
                 </LinearLayout>
             </FrameLayout>

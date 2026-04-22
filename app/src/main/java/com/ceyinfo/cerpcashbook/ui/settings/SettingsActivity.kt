@@ -29,7 +29,6 @@ class SettingsActivity : AppCompatActivity() {
         session = SessionManager(this)
 
         binding.tvVersion.text = "v${BuildConfig.VERSION_NAME} (${BuildConfig.VERSION_CODE})"
-        binding.tvSiteName.text = session.businessUnitName ?: "—"
         binding.tvRole.text = when (session.cashRole) {
             "clerk" -> "Site Cash Clerk"
             "custodian" -> "Site Cash Custodian"

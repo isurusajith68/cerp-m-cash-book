@@ -51,8 +51,8 @@ class BuAdapter(
                 width = indentPx
             }
 
-            binding.tvBuName.text = bu.name
-            binding.tvBuName.paint.isFakeBoldText = node.hasChildren
+            binding.tvBuName.text = if (bu.isPrimary) "★ ${bu.name}" else bu.name
+            binding.tvBuName.paint.isFakeBoldText = node.hasChildren || bu.isPrimary
 
             // Role badge (Clerk / Custodian / Both)
             val roleText = when (bu.cashRole) {
