@@ -10,7 +10,9 @@ import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.content.ContextCompat
 import androidx.core.view.WindowCompat
+import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.lifecycleScope
+import androidx.lifecycle.repeatOnLifecycle
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
 import com.ceyinfo.cerpcashbook.R
@@ -19,23 +21,14 @@ import com.ceyinfo.cerpcashbook.data.remote.ApiClient
 import com.ceyinfo.cerpcashbook.databinding.ActivityNotificationsBinding
 import com.ceyinfo.cerpcashbook.databinding.ItemNotificationBinding
 import com.ceyinfo.cerpcashbook.databinding.ItemNotificationDateHeaderBinding
+import com.ceyinfo.cerpcashbook.fcm.NotificationEvents
+import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.launch
 import java.text.SimpleDateFormat
 import java.util.Calendar
 import java.util.Date
 import java.util.Locale
 
-/**
- * Notifications screen.
- *
- *   • List grouped by date (Today / Yesterday / This Week / Earlier).
- *   • Each row carries a colored type icon + an action hint (Acknowledge,
- *     Review, Open) so the user knows what tapping does without reading
- *     the whole title.
- *   • Tap → mark-as-read + deep-link to the right action screen.
- *   • Mark-all-read button only appears when there's something to mark.
- *   • Empty state with friendly copy.
- */
 class NotificationsActivity : AppCompatActivity() {
 
     private lateinit var binding: ActivityNotificationsBinding
@@ -72,6 +65,15 @@ class NotificationsActivity : AppCompatActivity() {
         binding.rvNotifications.adapter = adapter
 
         loadNotifications()
+
+        // Live refresh when an FCM push lands while this screen is visible.
+        lifecycleScope.launch {
+            repeatOnLifecycle(Lifecycle.State.STARTED) {
+                NotificationEvents.flow.collectLatest {
+                    loadNotifications()
+                }
+            }
+        }
     }
 
     // ─── Data load ─────────────────────────────────────────────────────────

@@ -12,11 +12,14 @@ import android.widget.TextView
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.content.ContextCompat
 import androidx.core.view.WindowCompat
+import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.lifecycleScope
+import androidx.lifecycle.repeatOnLifecycle
 import com.ceyinfo.cerpcashbook.R
 import android.widget.Toast
 import com.ceyinfo.cerpcashbook.data.remote.ApiClient
 import com.ceyinfo.cerpcashbook.databinding.ActivityModuleHubBinding
+import com.ceyinfo.cerpcashbook.fcm.NotificationEvents
 import com.ceyinfo.cerpcashbook.ui.advances.CashAdvancesTabActivity
 import com.ceyinfo.cerpcashbook.ui.common.BottomNav
 import com.ceyinfo.cerpcashbook.ui.login.LoginActivity
@@ -25,6 +28,7 @@ import com.ceyinfo.cerpcashbook.ui.review.ReviewVouchersActivity
 import com.ceyinfo.cerpcashbook.util.SessionManager
 import com.google.android.material.card.MaterialCardView
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.launch
 
 /**
@@ -57,9 +61,7 @@ class ModuleHubActivity : AppCompatActivity() {
         setupHeader()
         setupBottomNav()
         buildModuleTiles()
-        // `loadNotifBadge()` runs from onResume() — calling it here too
-        // races with that one on first launch and stacks duplicate alert
-        // cards. `notifBadgeJob` also cancels in-flight jobs defensively.
+        
         checkForUpdates()
 
         binding.swipeRefresh.setOnRefreshListener {
@@ -69,6 +71,15 @@ class ModuleHubActivity : AppCompatActivity() {
             }
         }
         binding.swipeRefresh.setColorSchemeResources(R.color.primary)
+
+       
+        lifecycleScope.launch {
+            repeatOnLifecycle(Lifecycle.State.STARTED) {
+                NotificationEvents.flow.collectLatest {
+                    loadNotifBadge()
+                }
+            }
+        }
     }
 
     override fun onResume() {

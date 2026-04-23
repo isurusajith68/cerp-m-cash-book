@@ -53,9 +53,10 @@ class CerpFcmService : FirebaseMessagingService() {
         val refId = data["ref_id"]
 
         showSystemNotification(title, body, type, refId)
+        
+        NotificationEvents.signalPush()
     }
 
-    /** Builds the system notification with a deep-link `PendingIntent`. */
     private fun showSystemNotification(
         title: String,
         body: String,
