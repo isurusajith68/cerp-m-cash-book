@@ -17,6 +17,7 @@ local.properties
 # Signing keys — never commit
 *.jks
 *.keystore
+*.jks.base64.txt
 app/release.keystore
 
 *.md
