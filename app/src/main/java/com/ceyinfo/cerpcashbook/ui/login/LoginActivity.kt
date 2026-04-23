@@ -203,6 +203,7 @@ class LoginActivity : AppCompatActivity() {
                 ?.takeIf { it.isSuccessful && it.body()?.success == true }
                 ?.body()?.data
             session.cashRole = roleData?.role
+            session.saveRoleLabels(roleData?.roleLabels)
 
             val perms = runCatching { api.getMyPermissions() }
                 .getOrNull()

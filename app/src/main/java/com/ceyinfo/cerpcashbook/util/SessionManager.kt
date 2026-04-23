@@ -24,6 +24,7 @@ class SessionManager(context: Context) {
         private const val KEY_BU_NAME = "business_unit_name"
         private const val KEY_BU_LEVEL = "business_unit_level"
         private const val KEY_CASH_ROLE = "cash_role"
+        private const val KEY_ROLE_LABELS = "role_labels"
         private const val KEY_CLERK_SITES = "clerk_sites"
         private const val KEY_CUSTODIAN_SITES = "custodian_sites"
         private const val KEY_PERMISSIONS = "my_permissions"
@@ -65,6 +66,18 @@ class SessionManager(context: Context) {
     var cashRole: String?
         get() = prefs.getString(KEY_CASH_ROLE, null)
         set(value) = prefs.edit().putString(KEY_CASH_ROLE, value).apply()
+
+   
+    fun saveRoleLabels(labels: List<String>?) {
+        if (labels == null) prefs.edit().remove(KEY_ROLE_LABELS).apply()
+        else prefs.edit().putString(KEY_ROLE_LABELS, gson.toJson(labels)).apply()
+    }
+
+    fun getRoleLabels(): List<String> {
+        val json = prefs.getString(KEY_ROLE_LABELS, null) ?: return emptyList()
+        val type = object : TypeToken<List<String>>() {}.type
+        return runCatching { gson.fromJson<List<String>>(json, type) }.getOrDefault(emptyList())
+    }
 
     fun saveClerkSites(sites: List<CashSite>) {
         prefs.edit().putString(KEY_CLERK_SITES, gson.toJson(sites)).apply()
@@ -109,15 +122,18 @@ class SessionManager(context: Context) {
         return perms.entities[entityCode]?.allowed == true
     }
 
- 
+
     fun canPerformAction(entityCode: String, actionCode: String): Boolean {
         val perms = getPermissions() ?: return true   // permissions not loaded yet — fail open
         if (perms.isOwner) return true
         val ent = perms.entities[entityCode] ?: return true
         if (!ent.allowed) return false                // entity blocked
         if (ent.allowedActions.contains(actionCode)) return true
-        // No grants at all → default-allow (matches backend requireAcl).
-        return ent.permissions.isEmpty()
+        return ent.permissions.none {
+            it.accessType == "action" &&
+                it.targetCode == actionCode &&
+                it.permission == "disabled"
+        }
     }
 
     fun clearSession() {

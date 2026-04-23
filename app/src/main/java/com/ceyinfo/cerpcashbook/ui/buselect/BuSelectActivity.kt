@@ -187,6 +187,7 @@ class BuSelectActivity : AppCompatActivity() {
                     ?.takeIf { it.isSuccessful && it.body()?.success == true }
                     ?.body()?.data
                 session.cashRole = roleData?.role
+                session.saveRoleLabels(roleData?.roleLabels)
 
                 val clerkIds = roleData?.clerkSites?.map { it.buId }?.toSet().orEmpty()
                 val custodianIds = roleData?.custodianSites?.map { it.buId }?.toSet().orEmpty()

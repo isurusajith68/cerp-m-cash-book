@@ -80,6 +80,8 @@ data class VerifyModuleData(
 data class MyRoleData(
     val role: String,
     @SerializedName("is_owner") val isOwner: Boolean? = null,
+    /** Distinct role labels assigned to the user across all their BUs. */
+    @SerializedName("role_labels") val roleLabels: List<String>? = null,
     @SerializedName("clerk_sites") val clerkSites: List<CashSite>,
     @SerializedName("custodian_sites") val custodianSites: List<CashSite>
 )

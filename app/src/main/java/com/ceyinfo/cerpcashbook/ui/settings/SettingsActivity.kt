@@ -39,12 +39,8 @@ class SettingsActivity : AppCompatActivity() {
         session = SessionManager(this)
 
         binding.tvVersion.text = "v${BuildConfig.VERSION_NAME} (${BuildConfig.VERSION_CODE})"
-        binding.tvRole.text = when (session.cashRole) {
-            "clerk" -> "Site Cash Clerk"
-            "custodian" -> "Site Cash Custodian"
-            "both" -> "Clerk + Custodian"
-            else -> "—"
-        }
+      
+        binding.tvRole.text = session.getRoleLabels().joinToString(", ").ifEmpty { "—" }
 
         binding.btnBack.setOnClickListener { finish() }
 

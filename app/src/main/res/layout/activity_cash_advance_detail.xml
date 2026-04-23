@@ -125,7 +125,7 @@
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
                         android:letterSpacing="0.08"
-                        android:text="OUTSTANDING"
+                        android:text="NET BALANCE"
                         android:textAllCaps="true"
                         android:textColor="@color/text_secondary"
                         android:textSize="10sp" />

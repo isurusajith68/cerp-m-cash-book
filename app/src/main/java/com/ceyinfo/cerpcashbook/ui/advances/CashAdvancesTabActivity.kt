@@ -27,16 +27,7 @@ import kotlinx.coroutines.launch
 import java.text.SimpleDateFormat
 import java.util.Locale
 
-/**
- * Cash Advances screen with Issues / Received tabs.
- *
- * Issues tab (clerk / both / owner): list of advances the user disbursed, optionally
- * grouped by custodian ("By Person") or by site ("By Site"). Tapping a group opens
- * [CashAdvanceDetailActivity] filtered to that person or site.
- *
- * Received tab (custodian / both / owner): flat list of advances the user received.
- * Top button is "Add Expense" instead of "Add New".
- */
+
 class CashAdvancesTabActivity : AppCompatActivity() {
 
     private lateinit var binding: ActivityCashAdvancesBinding
@@ -52,8 +43,7 @@ class CashAdvancesTabActivity : AppCompatActivity() {
     private enum class GroupMode { BY_PERSON, BY_SITE }
 
     companion object {
-        // Optional intent extra to land on a specific tab (e.g. from a hub
-        // alert card or a notification deep-link). Values: TAB_ISSUES / TAB_RECEIVED.
+
         const val EXTRA_INITIAL_TAB = "initial_tab"
         const val TAB_ISSUES = "issues"
         const val TAB_RECEIVED = "received"
@@ -68,8 +58,6 @@ class CashAdvancesTabActivity : AppCompatActivity() {
         setContentView(binding.root)
         session = SessionManager(this)
 
-        // Initial tab: explicit deep-link wins (alert card / notification),
-        // otherwise pick a sensible default based on the user's ACL.
         currentTab = when (intent.getStringExtra(EXTRA_INITIAL_TAB)) {
             TAB_RECEIVED -> Tab.RECEIVED
             TAB_ISSUES -> Tab.ISSUES
@@ -134,11 +122,10 @@ class CashAdvancesTabActivity : AppCompatActivity() {
 
     override fun onResume() {
         super.onResume()
-        // Reload after returning from SendCash / SubmitExpense so new items appear
+        
         loadAdvances()
     }
 
-    // ─── Sub-grouping chips (Issues tab only) ──────────────────────────────
 
     private fun setupGroupChips() {
         binding.groupModeChips.removeAllViews()
@@ -215,25 +202,14 @@ class CashAdvancesTabActivity : AppCompatActivity() {
         binding.tvPendingAck.text = String.format(Locale.US, "%02d Items", pending)
     }
 
-    // ─── Data load ─────────────────────────────────────────────────────────
-
-    /**
-     * Loads three master lists in parallel:
-     *   - advances (for counts / totals on each row)
-     *   - reachable custodians (master list for the "List view" rows)
-     *   - accessible sites (master list for the "BU view" rows)
-     *
-     * Custodians and sites drive the row set so a fresh person/BU still
-     * appears even before any cash has been disbursed to them.
-     */
+  
     private fun loadAdvances() {
         binding.progress.visibility = View.VISIBLE
         lifecycleScope.launch {
             try {
                 val api = ApiClient.getService(this@CashAdvancesTabActivity)
 
-                // /cash-advances accepts a null site filter → backend aggregates
-                // across every site the user can reach.
+               
                 val advResp = api.getCashAdvances(buId = null, page = 1, limit = 200)
                 if (advResp.isSuccessful && advResp.body()?.success == true) {
                     allAdvances = advResp.body()?.data ?: emptyList()
@@ -283,10 +259,7 @@ class CashAdvancesTabActivity : AppCompatActivity() {
         }
     }
 
-    /**
-     * Show a confirm bottom sheet, call the ack endpoint, then show a success
-     * sheet. On success the advance is mutated in place and the row re-renders.
-     */
+
     private fun confirmAndAcknowledge(advance: CashAdvance) {
         val sender = listOfNotNull(advance.senderFirstName, advance.senderLastName)
             .joinToString(" ").ifBlank { "—" }
@@ -332,26 +305,35 @@ class CashAdvancesTabActivity : AppCompatActivity() {
     }
 
     private fun buildIssuesRows(): List<GroupRow> {
-        // Backend already BU-scopes the advances list to the current user,
-        // so there's no need to re-filter by senderId / owner here.
         val myDisbursals = allAdvances
+
+        // `/custodians/reachable` returns one row per (user, site) with a
+        // per-site imprest balance. Aggregate it by user for BY_PERSON and
+        // by site for BY_SITE so each group row shows a single "outstanding"
+        // figure instead of a per-site breakdown.
+        val outstandingByUser = reachableCustodians
+            .groupBy { it.userId }
+            .mapValues { (_, entries) -> entries.sumOf { it.balance } }
+        val outstandingBySite = reachableCustodians
+            .groupBy { it.buId }
+            .mapValues { (_, entries) -> entries.sumOf { it.balance } }
 
         return when (currentGroupMode) {
             GroupMode.BY_PERSON -> {
-                // One row per distinct custodian (a custodian assigned to
-                // multiple sites collapses into a single entry — drilling in
-                // surfaces all their advances across sites).
+                val myUserId = session.userId
                 val advancesByPerson = myDisbursals.groupBy { it.recipientId }
                 reachableCustodians
                     .distinctBy { it.userId }
                     .map { c ->
                         val group = advancesByPerson[c.userId].orEmpty()
+                        val displayName = listOf(c.firstName, c.lastName)
+                            .joinToString(" ").ifBlank { "Unknown" }
+                            .let { if (c.userId == myUserId) "$it (you)" else it }
                         GroupRow(
                             id = c.userId,
-                            name = listOf(c.firstName, c.lastName)
-                                .joinToString(" ").ifBlank { "Unknown" },
+                            name = displayName,
                             count = group.size,
-                            total = group.sumOf { it.amount },
+                            outstanding = outstandingByUser[c.userId] ?: 0.0,
                         )
                     }
                     .sortedBy { it.name.lowercase() }
@@ -364,7 +346,7 @@ class CashAdvancesTabActivity : AppCompatActivity() {
                         id = s.buId,
                         name = s.buName,
                         count = group.size,
-                        total = group.sumOf { it.amount },
+                        outstanding = outstandingBySite[s.buId] ?: 0.0,
                         level = s.level,
                     )
                 }.sortedBy { it.name.lowercase() }
@@ -381,12 +363,20 @@ class CashAdvancesTabActivity : AppCompatActivity() {
 
     // ─── Row models & adapters ─────────────────────────────────────────────
 
+    /**
+     * Summary row shown on the Issued → By Person / By Site list.
+     *
+     * `outstanding` = the custodian's (or site's) current imprest float —
+     * advances received minus expenses already vouchered. Comes from
+     * `/custodians/reachable`, which joins the running ledger balance
+     * per (user, site) pair; we aggregate it here.
+     */
     private data class GroupRow(
         val id: String,
         val name: String,
         val count: Int,
-        val total: Double,
-        val level: String? = null, // Org/Division/Project/Site — only set in BY_SITE mode
+        val outstanding: Double,                 // current imprest balance (what's still with them)
+        val level: String? = null,               // Org/Division/Project/Site — only set in BY_SITE mode
     )
 
     private class GroupAdapter(
@@ -410,7 +400,7 @@ class CashAdvancesTabActivity : AppCompatActivity() {
             b.tvName.text = row.name
             b.tvInitial.text = row.name.firstOrNull()?.uppercase() ?: "?"
             b.tvCount.text = "${row.count} ${if (row.count == 1) "advance" else "advances"}"
-            b.tvTotal.text = "LKR " + String.format(Locale.US, "%,.2f", row.total)
+            b.tvTotal.text = "LKR " + String.format(Locale.US, "%,.2f", row.outstanding)
 
             // Level badge — only meaningful in BY_SITE mode (org/division/project/site).
             if (!row.level.isNullOrBlank()) {
@@ -441,10 +431,7 @@ class CashAdvancesTabActivity : AppCompatActivity() {
         }
     }
 
-    /**
-     * Received-tab row adapter. Shows the inline Acknowledge button on each
-     * `pending` row when the user has the `cash_advance.acknowledge` ACL.
-     */
+    
     private class FlatAdvanceAdapter(
         private val rows: List<CashAdvance>,
         private val canAcknowledge: Boolean,
@@ -494,7 +481,7 @@ class CashAdvancesTabActivity : AppCompatActivity() {
                 mutate(); setColor(palette[position % palette.size])
             }
 
-            // Description doubles as the BU/project subtitle when present.
+        
             val subtitle = listOfNotNull(
                 a.description?.takeIf { it.isNotBlank() },
                 a.buName?.takeIf { it.isNotBlank() },
@@ -512,8 +499,6 @@ class CashAdvancesTabActivity : AppCompatActivity() {
                 } catch (_: Exception) { it.substring(0, 10.coerceAtMost(it.length)) }
             } ?: ""
 
-            // Inline Acknowledge: only on pending rows AND when the user has
-            // the cash_advance.acknowledge action allowed in their ACL.
             if (a.status == "pending" && canAcknowledge) {
                 b.btnAcknowledge.visibility = View.VISIBLE
                 b.btnAcknowledge.setOnClickListener { onAcknowledge(a) }

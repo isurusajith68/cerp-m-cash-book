@@ -59,9 +59,11 @@ class CashAdvanceDetailActivity : AppCompatActivity() {
     private lateinit var displayName: String
 
     private var allAdvances: List<CashAdvance> = emptyList()
-    private var statusFilter: String? = null   // null = All
+    private var statusFilter: String? = null  
 
-    /** Pending cancel ops keyed by advance id, kept while undo snackbar lives. */
+  
+    private var ledgerOutstanding: Double? = null
+
     private val pendingCancels = mutableMapOf<String, Job>()
 
     companion object {
@@ -94,7 +96,7 @@ class CashAdvanceDetailActivity : AppCompatActivity() {
         binding.tvSubtitle.visibility = View.VISIBLE
         binding.btnBack.setOnClickListener { finish() }
 
-        // Add New gated by ACL — drops the button entirely if denied.
+    
         if (session.canPerformAction("cash_advance", "add")) {
             binding.btnAddNew.visibility = View.VISIBLE
             binding.btnAddNew.setOnClickListener {
@@ -126,8 +128,7 @@ class CashAdvanceDetailActivity : AppCompatActivity() {
         loadTransactions()
     }
 
-    // ─── Filter chips ──────────────────────────────────────────────────────
-
+  
     private val statusFilters = listOf(
         null to "All",
         "pending" to "Pending",
@@ -180,6 +181,8 @@ class CashAdvanceDetailActivity : AppCompatActivity() {
 
     private fun loadTransactions() {
         binding.progress.visibility = View.VISIBLE
+        // Reset so the breakdown card shows "—" while reloading.
+        ledgerOutstanding = null
         lifecycleScope.launch {
             try {
                 val api = ApiClient.getService(this@CashAdvanceDetailActivity)
@@ -206,6 +209,35 @@ class CashAdvanceDetailActivity : AppCompatActivity() {
                 binding.swipeRefresh.isRefreshing = false
             }
         }
+        loadOutstanding()
+    }
+
+    /**
+     * Hit `/site-cash/ledger` filtered by the current drill (person or BU)
+     * and compute outstanding = Σ debit − Σ credit. This is the real imprest
+     * balance — acknowledged advances minus approved expense vouchers — and
+     * matches what the parent list view shows.
+     *
+     * `limit = 1000` is a pragmatic ceiling: cash-book sites rarely cross
+     * that many entries; if they do we can paginate later.
+     */
+    private fun loadOutstanding() {
+        lifecycleScope.launch {
+            try {
+                val api = ApiClient.getService(this@CashAdvanceDetailActivity)
+                val resp = when (mode) {
+                    "person" -> api.getLedger(recipientId = filterId, page = 1, limit = 1000)
+                    else     -> api.getLedger(buId = filterId, page = 1, limit = 1000)
+                }
+                if (resp.isSuccessful && resp.body()?.success == true) {
+                    val rows = resp.body()?.data.orEmpty()
+                    ledgerOutstanding = rows.sumOf { it.debit } - rows.sumOf { it.credit }
+                    renderBreakdown()
+                }
+            } catch (_: Exception) {
+                // Silent — header just keeps showing "—" until next refresh.
+            }
+        }
     }
 
     private fun rebuild() {
@@ -224,13 +256,13 @@ class CashAdvanceDetailActivity : AppCompatActivity() {
         val disbursed = allAdvances
             .filter { it.status != "cancelled" }
             .sumOf { it.amount }
-        // Outstanding = pending only (custodian hasn't taken receipt yet).
-        val outstanding = allAdvances
-            .filter { it.status == "pending" }
-            .sumOf { it.amount }
 
         binding.tvTotalDisbursed.text = "LKR " + String.format(Locale.US, "%,.2f", disbursed)
-        binding.tvOutstanding.text = "LKR " + String.format(Locale.US, "%,.2f", outstanding)
+        // Outstanding = imprest balance from the ledger (acknowledged advances
+        // minus approved expense vouchers). Falls back to "—" while loading.
+        binding.tvOutstanding.text = ledgerOutstanding
+            ?.let { "LKR " + String.format(Locale.US, "%,.2f", it) }
+            ?: "—"
 
         bindStatusPill(binding.statPending.root, pending, "Pending", "#D97706")
         bindStatusPill(binding.statAcknowledged.root, acked, "Acknowledged", "#059669")
@@ -300,7 +332,7 @@ class CashAdvanceDetailActivity : AppCompatActivity() {
     // ─── Swipe-to-cancel with snackbar undo ───────────────────────────────
 
     private fun setupSwipeToCancel() {
-        if (!session.canPerformAction("cash_advance", "cancel")) return
+        val me = session.userId ?: return
 
         val callback = object : ItemTouchHelper.SimpleCallback(
             0, ItemTouchHelper.LEFT or ItemTouchHelper.RIGHT,
@@ -309,8 +341,11 @@ class CashAdvanceDetailActivity : AppCompatActivity() {
                 val pos = vh.adapterPosition
                 if (pos == RecyclerView.NO_POSITION) return 0
                 val row = adapter.itemAt(pos) ?: return 0
-                // Only swipe-cancel on Pending item rows. Headers + non-pending = no swipe.
+             
                 if (row !is Row.Item || row.advance.status != "pending") return 0
+                val isSender = row.advance.senderId == me
+                val isRecipient = row.advance.recipientId == me
+                if (!isSender && !isRecipient) return 0
                 return super.getMovementFlags(rv, vh)
             }
 
@@ -344,11 +379,7 @@ class CashAdvanceDetailActivity : AppCompatActivity() {
         ItemTouchHelper(callback).attachToRecyclerView(binding.rvList)
     }
 
-    /**
-     * Optimistically remove the advance from the list and show a 5-sec
-     * snackbar with Undo. The actual API call only fires when the snackbar
-     * times out without an Undo tap. This keeps cancel reversible.
-     */
+  
     private fun askCancelWithUndo(advance: CashAdvance) {
         // Optimistic remove
         allAdvances = allAdvances.filterNot { it.id == advance.id }
@@ -434,13 +465,14 @@ class CashAdvanceDetailActivity : AppCompatActivity() {
 
         if (!advance.receiptUrl.isNullOrBlank()) {
             sb.ivReceipt.visibility = View.VISIBLE
-            // Lightweight image load — Glide isn't a project dep, so use a
-            // background fetch via OkHttp into a Bitmap. Acceptable for a
-            // single sheet preview; switch to Glide/Coil if added later.
+         
             loadImageInto(sb.ivReceipt, advance.receiptUrl)
         }
 
-        if (advance.status == "pending" && session.canPerformAction("cash_advance", "cancel")) {
+        val me = session.userId
+        val isSender = me != null && advance.senderId == me
+        val isRecipient = me != null && advance.recipientId == me
+        if (advance.status == "pending" && (isSender || isRecipient)) {
             sb.btnCancelAdvance.visibility = View.VISIBLE
             sb.btnCancelAdvance.setOnClickListener {
                 dialog.dismiss()

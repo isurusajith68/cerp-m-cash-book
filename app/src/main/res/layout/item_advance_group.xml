@@ -96,7 +96,7 @@
                 android:layout_height="wrap_content"
                 android:layout_gravity="end"
                 android:letterSpacing="0.08"
-                android:text="@string/balance_label"
+                android:text="NET BALANCE"
                 android:textAllCaps="true"
                 android:textColor="@color/text_secondary"
                 android:textSize="9sp" />

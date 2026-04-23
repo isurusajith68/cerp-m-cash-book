@@ -24,6 +24,7 @@ import com.ceyinfo.cerpcashbook.ui.notifications.NotificationsActivity
 import com.ceyinfo.cerpcashbook.ui.review.ReviewVouchersActivity
 import com.ceyinfo.cerpcashbook.util.SessionManager
 import com.google.android.material.card.MaterialCardView
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
 
 /**
@@ -56,7 +57,9 @@ class ModuleHubActivity : AppCompatActivity() {
         setupHeader()
         setupBottomNav()
         buildModuleTiles()
-        loadNotifBadge()
+        // `loadNotifBadge()` runs from onResume() — calling it here too
+        // races with that one on first launch and stacks duplicate alert
+        // cards. `notifBadgeJob` also cancels in-flight jobs defensively.
         checkForUpdates()
 
         binding.swipeRefresh.setOnRefreshListener {
@@ -70,20 +73,13 @@ class ModuleHubActivity : AppCompatActivity() {
 
     override fun onResume() {
         super.onResume()
-        // Role / permissions may have changed since last open — refresh from
-        // the server, then rebuild tiles + badge with the fresh ACL.
+     
         setupHeader()
         loadNotifBadge()
         refreshPermissionsAndTiles()
     }
 
-    /**
-     * Refresh `/my-permissions` + `/my-role` and rebuild the tile grid. Tiles
-     * render immediately from cached ACL so the user sees something instantly;
-     * once the network call returns we cache the fresh data and re-render.
-     * `onDone` fires whether the refresh succeeded or failed — used by
-     * pull-to-refresh to dismiss its spinner.
-     */
+    
     private fun refreshPermissionsAndTiles(onDone: (() -> Unit)? = null) {
         buildModuleTiles()
         lifecycleScope.launch {
@@ -94,7 +90,9 @@ class ModuleHubActivity : AppCompatActivity() {
                     session.savePermissions(perms.body()?.data)
                     val role = api.getMyRole()
                     if (role.isSuccessful && role.body()?.success == true) {
-                        session.cashRole = role.body()?.data?.role
+                        val data = role.body()?.data
+                        session.cashRole = data?.role
+                        session.saveRoleLabels(data?.roleLabels)
                     }
                     buildModuleTiles()
                 }
@@ -260,12 +258,7 @@ class ModuleHubActivity : AppCompatActivity() {
         BottomNav.bind(binding.bottomNav.root, this, BottomNav.Tab.HOME)
     }
 
-    /**
-     * Background-check GitHub Releases for a newer signed APK. Throttled to
-     * once every 4 hours by [AppUpdater]; respects the user's "Skip" choice.
-     * Silent if there's nothing to do — only opens the dialog when an update
-     * is actually available.
-     */
+   
     private fun checkForUpdates() {
         lifecycleScope.launch {
             val updater = com.ceyinfo.cerpcashbook.updater.AppUpdater(this@ModuleHubActivity)
@@ -278,10 +271,12 @@ class ModuleHubActivity : AppCompatActivity() {
         }
     }
 
+   
+    private var notifBadgeJob: Job? = null
+
     private fun loadNotifBadge() {
-        // Aggregated across every BU the user can reach — backend BU-scopes by user.
-        // Drives both the bottom-nav alert badge and the hub alert cards.
-        lifecycleScope.launch {
+        notifBadgeJob?.cancel()
+        notifBadgeJob = lifecycleScope.launch {
             try {
                 val api = ApiClient.getService(this@ModuleHubActivity)
 
