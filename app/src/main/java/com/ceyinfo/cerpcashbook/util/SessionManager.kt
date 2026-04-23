@@ -109,12 +109,15 @@ class SessionManager(context: Context) {
         return perms.entities[entityCode]?.allowed == true
     }
 
-    /** True when a specific action target_code is in the user's allowed list. */
+ 
     fun canPerformAction(entityCode: String, actionCode: String): Boolean {
-        val perms = getPermissions() ?: return false
+        val perms = getPermissions() ?: return true   // permissions not loaded yet — fail open
         if (perms.isOwner) return true
-        val ent = perms.entities[entityCode] ?: return false
-        return ent.allowed && ent.allowedActions.contains(actionCode)
+        val ent = perms.entities[entityCode] ?: return true
+        if (!ent.allowed) return false                // entity blocked
+        if (ent.allowedActions.contains(actionCode)) return true
+        // No grants at all → default-allow (matches backend requireAcl).
+        return ent.permissions.isEmpty()
     }
 
     fun clearSession() {

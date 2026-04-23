@@ -4,7 +4,6 @@ import android.app.DatePickerDialog
 import android.net.Uri
 import android.os.Bundle
 import android.view.View
-import android.widget.AdapterView
 import android.widget.ArrayAdapter
 import android.widget.Toast
 import androidx.activity.result.contract.ActivityResultContracts
@@ -69,7 +68,10 @@ class SendCashActivity : AppCompatActivity() {
     }
 
     private val methodCodes = listOf("cash", "online", "cdm", "cheque", "counter")
-    private val methodLabels = listOf("Cash", "Online Transfer", "CDM", "Cheque", "Counter")
+    private val methodLabels = listOf("Cash", "Online", "CDM", "Cheque", "Counter")
+    private var selectedMethodIdx: Int = 0
+
+    private val amountQuickPicks = listOf(1_000.0, 5_000.0, 10_000.0, 25_000.0, 50_000.0)
 
     companion object {
         const val EXTRA_CUSTODIAN_ID = "custodian_id"
@@ -103,10 +105,38 @@ class SendCashActivity : AppCompatActivity() {
         binding.btnAttachPhoto.setOnClickListener { pickImage.launch("image/*") }
         binding.btnRemovePhoto.setOnClickListener { clearReceipt() }
         binding.btnPickDate.setOnClickListener { openDatePicker() }
+        binding.btnAmountCopy.setOnClickListener { copyAmountToClipboard() }
+        binding.btnHistory.setOnClickListener {
+            // Open the Cash Advance Issues tab to view recent disbursements.
+            startActivity(android.content.Intent(this,
+                com.ceyinfo.cerpcashbook.ui.advances.CashAdvancesTabActivity::class.java))
+        }
+        // Tap the recipient card to open the picker (when more than one option).
+        binding.cardRecipient.setOnClickListener {
+            if (visibleCustodians.size > 1) showRecipientPicker()
+        }
 
         renderDateButton()
-        setupMethodSpinner()
+        setupMethodChips()
+        setupAmountQuickPicks()
+        // Keep the bottom Send button label in sync with whatever's typed.
+        binding.etAmount.addTextChangedListener(object : android.text.TextWatcher {
+            override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) {}
+            override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) {}
+            override fun afterTextChanged(s: android.text.Editable?) { updateSendButtonLabel() }
+        })
+        updateSendButtonLabel()
         loadCustodians()
+    }
+
+    /** Send button reads "Send LKR X,XXX" so the user always sees the total. */
+    private fun updateSendButtonLabel() {
+        val raw = binding.etAmount.text?.toString()?.trim().orEmpty()
+        val v = raw.toDoubleOrNull()
+        binding.btnSend.text = if (v != null && v > 0)
+            "Send LKR " + java.lang.String.format(Locale.US, "%,.2f", v)
+        else
+            "Send Cash"
     }
 
     // ─── Date picker ───────────────────────────────────────────────────────
@@ -131,24 +161,156 @@ class SendCashActivity : AppCompatActivity() {
     }
 
     private fun renderDateButton() {
-        binding.btnPickDate.text = displayDateFmt.format(selectedDateMs)
+        // Date is now an input-style row: tv_date_label is the value text.
+        binding.tvDateLabel.text = displayDateFmt.format(selectedDateMs)
+    }
+
+    /** Copies the current amount value (digits only, no formatting) to clipboard. */
+    private fun copyAmountToClipboard() {
+        val raw = binding.etAmount.text?.toString()?.trim().orEmpty()
+        if (raw.isEmpty()) return
+        val cm = getSystemService(android.content.Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
+        cm.setPrimaryClip(android.content.ClipData.newPlainText("amount", raw))
+        Toast.makeText(this, "Amount copied", Toast.LENGTH_SHORT).show()
+    }
+
+    /** Opens an alert dialog to pick a custodian when there's more than one. */
+    private fun showRecipientPicker() {
+        if (visibleCustodians.size <= 1) return
+        val labels = visibleCustodians.map {
+            "${it.firstName} ${it.lastName} · ${it.buName}"
+        }.toTypedArray()
+        com.google.android.material.dialog.MaterialAlertDialogBuilder(this)
+            .setTitle("Select recipient")
+            .setItems(labels) { _, which ->
+                binding.spinnerCustodian.setSelection(which)
+                renderRecipientCard()
+                if (binding.rowBank.visibility == View.VISIBLE) loadBankAccountsForSelection()
+            }
+            .show()
+    }
+
+    /** Reads the currently-selected custodian and paints the card header. */
+    private fun renderRecipientCard() {
+        val r = selectedCustodian()
+        if (r == null) {
+            binding.tvAvatar.text = "?"
+            binding.tvRecipientName.text = "No recipient available"
+            binding.tvRecipientBu.text = "—"
+            binding.btnChangeRecipient.visibility = View.GONE
+            return
+        }
+        binding.tvAvatar.text = r.firstName.firstOrNull()?.uppercase()
+            ?: r.lastName.firstOrNull()?.uppercase() ?: "?"
+        binding.tvRecipientName.text = "${r.firstName} ${r.lastName}".trim()
+        binding.tvRecipientBu.text = r.buName +
+            (r.buLevel?.let { " · ${it.uppercase(Locale.US)}" } ?: "")
+        binding.btnChangeRecipient.visibility =
+            if (visibleCustodians.size > 1) View.VISIBLE else View.GONE
     }
 
     // ─── Dropdowns ─────────────────────────────────────────────────────────
 
-    private fun setupMethodSpinner() {
-        binding.spinnerMethod.adapter = ArrayAdapter(
-            this, android.R.layout.simple_spinner_dropdown_item, methodLabels
-        )
-        binding.spinnerMethod.onItemSelectedListener = object : AdapterView.OnItemSelectedListener {
-            override fun onItemSelected(parent: AdapterView<*>?, view: View?, position: Int, id: Long) {
-                val isCash = methodCodes[position] == "cash"
-                binding.rowBank.visibility = if (isCash) View.GONE else View.VISIBLE
-                if (!isCash) loadBankAccountsForSelection()
+    /**
+     * Replaces the old method spinner with a row of chips. Selecting a non-cash
+     * method reveals the bank-account row and triggers a fresh bank fetch for
+     * the currently-selected custodian's site.
+     */
+    private fun setupMethodChips() {
+        binding.chipsMethod.removeAllViews()
+        methodLabels.forEachIndexed { index, label ->
+            val chip = buildPickerChip(label, index == selectedMethodIdx) {
+                if (selectedMethodIdx != index) {
+                    selectedMethodIdx = index
+                    val isCash = methodCodes[index] == "cash"
+                    binding.rowBank.visibility = if (isCash) View.GONE else View.VISIBLE
+                    if (!isCash) loadBankAccountsForSelection()
+                }
             }
-            override fun onNothingSelected(parent: AdapterView<*>?) {}
+            binding.chipsMethod.addView(chip)
+        }
+        // Initial visibility for the bank row.
+        binding.rowBank.visibility =
+            if (methodCodes[selectedMethodIdx] == "cash") View.GONE else View.VISIBLE
+    }
+
+    /** Quick-pick amounts (1K / 5K / 10K / 25K / 50K). Tap to fill. */
+    private fun setupAmountQuickPicks() {
+        binding.chipsAmount.removeAllViews()
+        amountQuickPicks.forEach { amt ->
+            val label = when {
+                amt >= 1000 -> "+${(amt / 1000).toInt()}K"
+                else -> "+${amt.toInt()}"
+            }
+            val chip = com.google.android.material.chip.Chip(this).apply {
+                val dp = resources.displayMetrics.density
+                text = label
+                isCheckable = false
+                chipCornerRadius = 18f * dp
+                chipStrokeWidth = 1f * dp
+                chipStrokeColor = android.content.res.ColorStateList.valueOf(
+                    androidx.core.content.ContextCompat.getColor(context, R.color.divider)
+                )
+                chipBackgroundColor = android.content.res.ColorStateList.valueOf(
+                    androidx.core.content.ContextCompat.getColor(context, R.color.white)
+                )
+                setTextColor(androidx.core.content.ContextCompat.getColor(context, R.color.on_surface))
+                setOnClickListener {
+                    val current = binding.etAmount.text?.toString()?.trim()?.toDoubleOrNull() ?: 0.0
+                    val next = current + amt
+                    binding.etAmount.setText(formatAmountInput(next))
+                    binding.etAmount.setSelection(binding.etAmount.text?.length ?: 0)
+                }
+            }
+            binding.chipsAmount.addView(chip)
         }
     }
+
+    /** Builds a single-select picker chip for the method row. */
+    private fun buildPickerChip(
+        label: String,
+        checked: Boolean,
+        onChecked: () -> Unit,
+    ): com.google.android.material.chip.Chip {
+        val dp = resources.displayMetrics.density
+        return com.google.android.material.chip.Chip(this).apply {
+            text = label
+            isCheckable = true
+            isChecked = checked
+            chipCornerRadius = 18f * dp
+            chipStrokeWidth = 1f * dp
+            chipStrokeColor = android.content.res.ColorStateList.valueOf(
+                androidx.core.content.ContextCompat.getColor(context, R.color.divider)
+            )
+            chipBackgroundColor = android.content.res.ColorStateList(
+                arrayOf(intArrayOf(android.R.attr.state_checked), intArrayOf()),
+                intArrayOf(
+                    androidx.core.content.ContextCompat.getColor(context, R.color.primary),
+                    androidx.core.content.ContextCompat.getColor(context, R.color.white),
+                )
+            )
+            setTextColor(
+                android.content.res.ColorStateList(
+                    arrayOf(intArrayOf(android.R.attr.state_checked), intArrayOf()),
+                    intArrayOf(
+                        androidx.core.content.ContextCompat.getColor(context, R.color.white),
+                        androidx.core.content.ContextCompat.getColor(context, R.color.on_surface),
+                    )
+                )
+            )
+            // Show a check on the selected method chip (matches the mockup).
+            isCheckedIconVisible = true
+            checkedIconTint = android.content.res.ColorStateList.valueOf(
+                androidx.core.content.ContextCompat.getColor(context, R.color.white)
+            )
+            setOnClickListener { if (isChecked) onChecked() }
+        }
+    }
+
+    /** Formats a Double into the input field — drops trailing `.0` for integers. */
+    private fun formatAmountInput(amt: Double): String =
+        if (amt == amt.toLong().toDouble()) amt.toLong().toString()
+        else String.format(Locale.US, "%.2f", amt)
 
     private fun loadCustodians() {
         binding.progress.visibility = View.VISIBLE
@@ -179,33 +341,20 @@ class SendCashActivity : AppCompatActivity() {
 
         if (visibleCustodians.isEmpty()) {
             showError("No custodians available to disburse to.")
-            binding.spinnerCustodian.visibility = View.GONE
-            binding.lblCustodian.visibility = View.GONE
-            binding.tvLockedContext.visibility = View.GONE
+            renderRecipientCard()
             return
         }
 
-        // If exactly one match (e.g. drill-down with one site), show as a
-        // locked context label instead of a spinner.
-        if (visibleCustodians.size == 1 &&
-            (lockedCustodianId != null || lockedSiteId != null)
-        ) {
-            val only = visibleCustodians.first()
-            binding.spinnerCustodian.visibility = View.GONE
-            binding.lblCustodian.visibility = View.GONE
-            binding.tvLockedContext.visibility = View.VISIBLE
-            binding.tvLockedContext.text = "${only.firstName} ${only.lastName} · ${only.buName}"
-        } else {
-            binding.tvLockedContext.visibility = View.GONE
-            binding.spinnerCustodian.visibility = View.VISIBLE
-            binding.lblCustodian.visibility = View.VISIBLE
-            val labels = visibleCustodians.map {
-                "${it.firstName} ${it.lastName} · ${it.buName} (Bal: ${"%,.0f".format(it.balance)})"
-            }
-            binding.spinnerCustodian.adapter = ArrayAdapter(
-                this, android.R.layout.simple_spinner_dropdown_item, labels
-            )
+        // The recipient card is the visible UI now — the spinner stays hidden,
+        // backing the selection. We populate it so the index lookup works for
+        // selectedCustodian().
+        val labels = visibleCustodians.map {
+            "${it.firstName} ${it.lastName} · ${it.buName} (Bal: ${"%,.0f".format(it.balance)})"
         }
+        binding.spinnerCustodian.adapter = ArrayAdapter(
+            this, android.R.layout.simple_spinner_dropdown_item, labels
+        )
+        renderRecipientCard()
 
         // If a non-cash method is already selected, banks need to refresh now
         // that we know which site we're operating in.
@@ -346,8 +495,8 @@ class SendCashActivity : AppCompatActivity() {
 
         binding.ivPhotoPreview.setImageURI(uri)
         binding.ivPhotoPreview.visibility = View.VISIBLE
+        binding.photoPlaceholder.visibility = View.GONE
         binding.btnRemovePhoto.visibility = View.VISIBLE
-        binding.btnAttachPhoto.text = getString(R.string.uploading)
         binding.btnAttachPhoto.isEnabled = false
 
         lifecycleScope.launch {
@@ -358,7 +507,7 @@ class SendCashActivity : AppCompatActivity() {
                 val response = api.uploadAdvanceReceipt(part)
                 if (response.isSuccessful && response.body()?.success == true) {
                     receiptUrl = response.body()?.data?.url
-                    binding.btnAttachPhoto.text = "Photo Attached"
+                    // Image is already shown in iv_photo_preview; placeholder is hidden.
                 } else {
                     showError(response.body()?.message ?: "Photo upload failed")
                     clearReceipt()
@@ -376,27 +525,36 @@ class SendCashActivity : AppCompatActivity() {
         receiptUrl = null
         binding.ivPhotoPreview.setImageDrawable(null)
         binding.ivPhotoPreview.visibility = View.GONE
+        binding.photoPlaceholder.visibility = View.VISIBLE
         binding.btnRemovePhoto.visibility = View.GONE
-        binding.btnAttachPhoto.text = getString(R.string.attach_photo)
         binding.btnAttachPhoto.isEnabled = true
     }
 
     // ─── Submit ────────────────────────────────────────────────────────────
 
+    /**
+     * Validates the form, then opens a confirm bottom sheet showing the user
+     * exactly what they're about to send. The actual POST happens inside the
+     * sheet's onConfirm callback (sheet handles its own loading + error).
+     * On success a green success sheet replaces it with primary/secondary
+     * CTAs ("Send another" / "Done").
+     */
     private fun sendCash() {
         val custodian = selectedCustodian() ?: run {
             showError("Select a custodian"); return
         }
 
         val amountStr = binding.etAmount.text?.toString()?.trim().orEmpty()
-        if (amountStr.isEmpty()) { binding.tilAmount.error = "Amount is required"; return }
+        if (amountStr.isEmpty()) { showError("Amount is required"); return }
         val amount = amountStr.toDoubleOrNull()
-        if (amount == null || amount <= 0) { binding.tilAmount.error = "Enter a valid amount"; return }
-        binding.tilAmount.error = null
+        if (amount == null || amount <= 0) { showError("Enter a valid amount"); return }
+        binding.tvError.visibility = View.GONE
 
-        val methodIdx = binding.spinnerMethod.selectedItemPosition.coerceAtLeast(0)
+        val methodIdx = selectedMethodIdx.coerceIn(0, methodCodes.lastIndex)
         val method = methodCodes[methodIdx]
+        val methodLabel = methodLabels[methodIdx]
         var bankAccountId: String? = null
+        var bankLabel: String? = null
         if (method != "cash") {
             if (bankAccounts.isEmpty()) {
                 showError("Add a bank account before sending by $method.")
@@ -404,39 +562,73 @@ class SendCashActivity : AppCompatActivity() {
             }
             val bankIdx = binding.spinnerBank.selectedItemPosition
             if (bankIdx < 0) { showError("Select a deposit account."); return }
-            bankAccountId = bankAccounts[bankIdx].id
+            val bank = bankAccounts[bankIdx]
+            bankAccountId = bank.id
+            bankLabel = "${bank.accountName} · ${bank.bankName ?: "—"} (${bank.accountNumber})"
         }
+        val displayDate = displayDateFmt.format(selectedDateMs)
+        val amountLabel = "LKR " + java.lang.String.format(Locale.US, "%,.2f", amount)
+        val recipientLabel = "${custodian.firstName} ${custodian.lastName} · ${custodian.buName}"
 
-        setLoading(true)
-        lifecycleScope.launch {
-            try {
-                val api = ApiClient.getService(this@SendCashActivity)
-                val response = api.createCashAdvance(
-                    CreateAdvanceRequest(
-                        buId = custodian.buId,
-                        recipientId = custodian.userId,
-                        amount = amount,
-                        referenceNo = binding.etReference.text?.toString()?.trim()?.ifEmpty { null },
-                        description = binding.etDescription.text?.toString()?.trim()?.ifEmpty { null },
-                        methodOfTransfer = method,
-                        bankAccountId = bankAccountId,
-                        receiptUrl = receiptUrl,
-                        advanceDate = dateFmt.format(selectedDateMs),
-                    )
+        val details = mutableListOf(
+            com.ceyinfo.cerpcashbook.ui.common.ActionSheets.Detail("Amount", amountLabel),
+            com.ceyinfo.cerpcashbook.ui.common.ActionSheets.Detail("To", recipientLabel),
+            com.ceyinfo.cerpcashbook.ui.common.ActionSheets.Detail("Date", displayDate),
+            com.ceyinfo.cerpcashbook.ui.common.ActionSheets.Detail("Method", methodLabel),
+        )
+        if (bankLabel != null) details.add(
+            com.ceyinfo.cerpcashbook.ui.common.ActionSheets.Detail("Deposit to", bankLabel)
+        )
+
+        com.ceyinfo.cerpcashbook.ui.common.ActionSheets.showConfirm(
+            context = this,
+            scope = lifecycleScope,
+            title = "Send cash?",
+            details = details,
+            confirmLabel = "Send $amountLabel",
+            warning = "A pending cash advance will be created. The recipient must acknowledge it before the ledger is debited.",
+            tone = com.ceyinfo.cerpcashbook.ui.common.ActionSheets.Tone.PRIMARY,
+        ) {
+            val api = ApiClient.getService(this@SendCashActivity)
+            val response = api.createCashAdvance(
+                CreateAdvanceRequest(
+                    buId = custodian.buId,
+                    recipientId = custodian.userId,
+                    amount = amount,
+                    referenceNo = binding.etReference.text?.toString()?.trim()?.ifEmpty { null },
+                    description = binding.etDescription.text?.toString()?.trim()?.ifEmpty { null },
+                    methodOfTransfer = method,
+                    bankAccountId = bankAccountId,
+                    receiptUrl = receiptUrl,
+                    advanceDate = dateFmt.format(selectedDateMs),
                 )
-
-                if (response.isSuccessful && response.body()?.success == true) {
-                    Toast.makeText(this@SendCashActivity, "Cash sent successfully", Toast.LENGTH_SHORT).show()
-                    finish()
-                } else {
-                    showError(response.body()?.message ?: "Failed to send cash")
-                }
-            } catch (e: Exception) {
-                showError(e.message ?: "An error occurred")
-            } finally {
-                setLoading(false)
+            )
+            if (!(response.isSuccessful && response.body()?.success == true)) {
+                throw RuntimeException(response.body()?.message ?: "Failed to send cash")
             }
+
+            // Show success sheet with two CTAs.
+            com.ceyinfo.cerpcashbook.ui.common.ActionSheets.showSuccess(
+                context = this@SendCashActivity,
+                title = "Cash sent",
+                subtitle = "$amountLabel sent to ${custodian.firstName}. Awaiting their acknowledgement.",
+                primaryLabel = "Done",
+                onPrimary = { finish() },
+                secondaryLabel = "Send another",
+                onSecondary = { resetFormForReuse() },
+            )
         }
+    }
+
+    /** Clear amount + reference + description + photo so the form is fresh
+     * for another disbursement. Keeps date + custodian + method + bank. */
+    private fun resetFormForReuse() {
+        binding.etAmount.setText("")
+        binding.etReference.setText("")
+        binding.etDescription.setText("")
+        clearReceipt()
+        binding.tvError.visibility = View.GONE
+        binding.etAmount.requestFocus()
     }
 
     private fun showError(msg: String) {

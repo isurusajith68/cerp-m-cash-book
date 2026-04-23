@@ -99,6 +99,7 @@ class SubmitExpenseActivity : AppCompatActivity() {
         binding.btnRemovePhoto.setOnClickListener { clearPendingReceipt() }
         binding.btnAddBill.setOnClickListener { addBillFromForm() }
         binding.btnSubmit.setOnClickListener { submitBatch() }
+        binding.rowBu.setOnClickListener { showSitePicker() }
 
         billAdapter = BillAdapter(bills) { idx ->
             bills.removeAt(idx)
@@ -127,11 +128,14 @@ class SubmitExpenseActivity : AppCompatActivity() {
                         val lvl = it.level?.uppercase(Locale.US) ?: ""
                         if (lvl.isBlank()) it.buName else "${it.buName} · $lvl"
                     }
+                    // The hidden spinner backs selectedSite(); the visible
+                    // row_bu uses tv_site_label and opens a picker on tap.
                     binding.spinnerSite.adapter = ArrayAdapter(
                         this@SubmitExpenseActivity,
                         android.R.layout.simple_spinner_dropdown_item,
                         labels
                     )
+                    renderSiteLabel()
                     if (sites.isEmpty()) showError("You have no accessible business units.")
                 } else {
                     showError(resp.body()?.message ?: "Failed to load business units")
@@ -147,6 +151,29 @@ class SubmitExpenseActivity : AppCompatActivity() {
     private fun selectedSite(): CashSite? =
         sites.getOrNull(binding.spinnerSite.selectedItemPosition)
 
+    /** Paints the BU label on the input-style row from the current selection. */
+    private fun renderSiteLabel() {
+        val s = selectedSite()
+        binding.tvSiteLabel.text = if (s == null) "Select business unit"
+        else s.buName + (s.level?.let { " · ${it.uppercase(Locale.US)}" } ?: "")
+    }
+
+    /** Opens an alert dialog to pick the business unit. */
+    private fun showSitePicker() {
+        if (sites.isEmpty()) return
+        val labels = sites.map {
+            val lvl = it.level?.uppercase(Locale.US) ?: ""
+            if (lvl.isBlank()) it.buName else "${it.buName} · $lvl"
+        }.toTypedArray()
+        com.google.android.material.dialog.MaterialAlertDialogBuilder(this)
+            .setTitle("Select business unit")
+            .setItems(labels) { _, which ->
+                binding.spinnerSite.setSelection(which)
+                renderSiteLabel()
+            }
+            .show()
+    }
+
     // ─── Date picker ───────────────────────────────────────────────────────
 
     private fun openDatePicker() {
@@ -161,7 +188,8 @@ class SubmitExpenseActivity : AppCompatActivity() {
     }
 
     private fun renderDateButton() {
-        binding.btnPickDate.text = displayFmt.format(pickedDateMs)
+        // Date row is now an input-style block; the value goes in tv_date_label.
+        binding.tvDateLabel.text = displayFmt.format(pickedDateMs)
     }
 
     // ─── Photo upload (one per bill, uploaded to OSS up-front) ─────────────
@@ -173,8 +201,8 @@ class SubmitExpenseActivity : AppCompatActivity() {
 
         binding.ivPhotoPreview.setImageURI(uri)
         binding.ivPhotoPreview.visibility = View.VISIBLE
+        binding.photoPlaceholder.visibility = View.GONE
         binding.btnRemovePhoto.visibility = View.VISIBLE
-        binding.btnAttachPhoto.text = getString(R.string.uploading)
         binding.btnAttachPhoto.isEnabled = false
 
         lifecycleScope.launch {
@@ -185,7 +213,7 @@ class SubmitExpenseActivity : AppCompatActivity() {
                 val resp = api.uploadAdvanceReceipt(part) // shared OSS upload endpoint
                 if (resp.isSuccessful && resp.body()?.success == true) {
                     pendingReceiptUrl = resp.body()?.data?.url
-                    binding.btnAttachPhoto.text = "Photo Attached"
+                    // Image preview is already visible; placeholder hidden.
                 } else {
                     showError(resp.body()?.message ?: "Photo upload failed")
                     clearPendingReceipt()
@@ -202,8 +230,8 @@ class SubmitExpenseActivity : AppCompatActivity() {
         pendingReceiptUrl = null
         binding.ivPhotoPreview.setImageDrawable(null)
         binding.ivPhotoPreview.visibility = View.GONE
+        binding.photoPlaceholder.visibility = View.VISIBLE
         binding.btnRemovePhoto.visibility = View.GONE
-        binding.btnAttachPhoto.text = getString(R.string.attach_photo)
         binding.btnAttachPhoto.isEnabled = true
     }
 
@@ -216,9 +244,8 @@ class SubmitExpenseActivity : AppCompatActivity() {
 
         when {
             description.isEmpty() -> { showError("Description is required"); return }
-            amount == null || amount <= 0 -> { binding.tilAmount.error = "Enter a valid amount"; return }
+            amount == null || amount <= 0 -> { showError("Enter a valid amount"); return }
         }
-        binding.tilAmount.error = null
         binding.tvError.visibility = View.GONE
 
         bills.add(
@@ -242,6 +269,17 @@ class SubmitExpenseActivity : AppCompatActivity() {
     private fun renderEmptyState() {
         binding.tvEmptyBills.visibility = if (bills.isEmpty()) View.VISIBLE else View.GONE
         binding.rvBills.visibility = if (bills.isEmpty()) View.GONE else View.VISIBLE
+
+        // Bill count badge ("0 ITEMS" / "1 ITEM" / "5 ITEMS").
+        binding.tvBillCount.text = "${bills.size} ${if (bills.size == 1) "ITEM" else "ITEMS"}"
+
+        // Budget total card — shows the running total of queued bills.
+        val total = bills.sumOf { it.amount }
+        binding.tvBudgetTotal.text = "LKR " + String.format(Locale.US, "%,.2f", total)
+        binding.tvBudgetMsg.text = if (bills.isEmpty())
+            "Add bills to see the running total."
+        else
+            "${bills.size} bill${if (bills.size == 1) "" else "s"} ready to submit."
     }
 
     // ─── Submit batch ──────────────────────────────────────────────────────

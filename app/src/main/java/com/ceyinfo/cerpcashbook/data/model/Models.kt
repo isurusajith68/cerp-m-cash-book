@@ -278,16 +278,21 @@ data class ReviewVoucherRequest(
 
 data class LedgerEntry(
     val id: String,
+    @SerializedName("bu_id") val buId: String? = null,
+    @SerializedName("recipient_id") val recipientId: String? = null,
     @SerializedName("txn_date") val txnDate: String,
     @SerializedName("txn_type") val txnType: String,
     val debit: Double = 0.0,
     val credit: Double = 0.0,
     @SerializedName("running_balance") val runningBalance: Double,
     val description: String? = null,
+    @SerializedName("reference_id") val referenceId: String? = null,
+    @SerializedName("reference_type") val referenceType: String? = null,
     @SerializedName("created_at") val createdAt: String? = null,
     @SerializedName("recipient_first_name") val recipientFirstName: String? = null,
     @SerializedName("recipient_last_name") val recipientLastName: String? = null,
-    @SerializedName("bu_name") val buName: String? = null
+    @SerializedName("bu_name") val buName: String? = null,
+    @SerializedName("bu_level") val buLevel: String? = null
 )
 
 // ── Site Cash: Notifications ──

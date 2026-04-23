@@ -1,0 +1,89 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:background="@color/white"
+    android:orientation="vertical"
+    android:paddingHorizontal="20dp"
+    android:paddingTop="14dp"
+    android:paddingBottom="24dp">
+
+    <!-- Drag handle -->
+    <View
+        android:layout_width="40dp"
+        android:layout_height="4dp"
+        android:layout_gravity="center_horizontal"
+        android:layout_marginBottom="14dp"
+        android:background="@drawable/bg_select_circle"
+        android:backgroundTint="#D1D5DB" />
+
+    <!-- Type pill -->
+    <TextView
+        android:id="@+id/tv_type_pill"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:background="@drawable/bg_level_badge"
+        android:letterSpacing="0.08"
+        android:paddingHorizontal="10dp"
+        android:paddingVertical="3dp"
+        android:textAllCaps="true"
+        android:textColor="@color/white"
+        android:textSize="10sp" />
+
+    <!-- Amount -->
+    <TextView
+        android:id="@+id/tv_amount"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="10dp"
+        android:textColor="@color/on_surface"
+        android:textSize="26sp"
+        android:textStyle="bold" />
+
+    <TextView
+        android:id="@+id/tv_description"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="4dp"
+        android:textColor="@color/text_secondary"
+        android:textSize="14sp" />
+
+    <View
+        android:layout_width="match_parent"
+        android:layout_height="1dp"
+        android:layout_marginVertical="16dp"
+        android:background="@color/divider" />
+
+    <!-- Detail rows -->
+    <include
+        android:id="@+id/row_date"
+        layout="@layout/_kv_row" />
+
+    <include
+        android:id="@+id/row_bu"
+        layout="@layout/_kv_row" />
+
+    <include
+        android:id="@+id/row_recipient"
+        layout="@layout/_kv_row" />
+
+    <include
+        android:id="@+id/row_running_balance"
+        layout="@layout/_kv_row" />
+
+    <include
+        android:id="@+id/row_created"
+        layout="@layout/_kv_row" />
+
+    <com.google.android.material.button.MaterialButton
+        android:id="@+id/btn_close"
+        style="@style/Widget.Material3.Button.OutlinedButton"
+        android:layout_width="match_parent"
+        android:layout_height="48dp"
+        android:layout_marginTop="14dp"
+        android:text="Close"
+        android:textAllCaps="false"
+        android:textSize="14sp"
+        app:cornerRadius="12dp" />
+</LinearLayout>

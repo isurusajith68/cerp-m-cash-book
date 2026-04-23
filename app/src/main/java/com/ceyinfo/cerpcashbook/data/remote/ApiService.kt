@@ -110,6 +110,8 @@ interface ApiService {
         @Query("bu_id") buId: String? = null,
         @Query("recipient_id") recipientId: String? = null,
         @Query("txn_type") txnType: String? = null,
+        @Query("from_date") fromDate: String? = null,
+        @Query("to_date") toDate: String? = null,
         @Query("page") page: Int = 1,
         @Query("limit") limit: Int = 20
     ): Response<ApiResponse<List<LedgerEntry>>>

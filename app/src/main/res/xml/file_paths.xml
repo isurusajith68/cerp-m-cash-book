@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<paths>
+    <!-- AppUpdater stores the downloaded APK in
+         getExternalFilesDir(Environment.DIRECTORY_DOWNLOADS), which maps to
+         <external-files-path name="..." path="Download/" />. -->
+    <external-files-path name="downloads" path="Download/" />
+</paths>

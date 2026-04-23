@@ -51,6 +51,14 @@ class CashAdvancesTabActivity : AppCompatActivity() {
     private enum class Tab { ISSUES, RECEIVED }
     private enum class GroupMode { BY_PERSON, BY_SITE }
 
+    companion object {
+        // Optional intent extra to land on a specific tab (e.g. from a hub
+        // alert card or a notification deep-link). Values: TAB_ISSUES / TAB_RECEIVED.
+        const val EXTRA_INITIAL_TAB = "initial_tab"
+        const val TAB_ISSUES = "issues"
+        const val TAB_RECEIVED = "received"
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         WindowCompat.setDecorFitsSystemWindows(window, false)
@@ -60,22 +68,68 @@ class CashAdvancesTabActivity : AppCompatActivity() {
         setContentView(binding.root)
         session = SessionManager(this)
 
-        // Default landing: if the user can submit expense vouchers but cannot
-        // disburse cash advances, land on Received (their primary action is
-        // adding their own bills). Anyone who can disburse lands on Issues.
-        val canDisburse = session.canPerformAction("cash_advance", "add")
-        val canSubmitBill = session.canPerformAction("expense_voucher", "add")
-        currentTab = if (!canDisburse && canSubmitBill) Tab.RECEIVED else Tab.ISSUES
+        // Initial tab: explicit deep-link wins (alert card / notification),
+        // otherwise pick a sensible default based on the user's ACL.
+        currentTab = when (intent.getStringExtra(EXTRA_INITIAL_TAB)) {
+            TAB_RECEIVED -> Tab.RECEIVED
+            TAB_ISSUES -> Tab.ISSUES
+            else -> {
+                val canDisburse = session.canPerformAction("cash_advance", "add")
+                val canSubmitBill = session.canPerformAction("expense_voucher", "add")
+                if (!canDisburse && canSubmitBill) Tab.RECEIVED else Tab.ISSUES
+            }
+        }
 
         binding.btnBack.setOnClickListener { finish() }
         binding.rvList.layoutManager = LinearLayoutManager(this)
         binding.swipeRefresh.setOnRefreshListener { loadAdvances() }
         binding.swipeRefresh.setColorSchemeResources(R.color.primary)
 
-        setupTabs()
+        binding.tabIssues.setOnClickListener { switchTab(Tab.ISSUES) }
+        binding.tabReceived.setOnClickListener { switchTab(Tab.RECEIVED) }
+
+        binding.fabSend.setOnClickListener {
+            startActivity(Intent(this, com.ceyinfo.cerpcashbook.ui.sendcash.SendCashActivity::class.java))
+        }
+        binding.tvViewHistory.setOnClickListener {
+            startActivity(Intent(this, com.ceyinfo.cerpcashbook.ui.ledger.LedgerActivity::class.java))
+        }
+        binding.btnSearch.setOnClickListener {
+            Toast.makeText(this, R.string.coming_soon, Toast.LENGTH_SHORT).show()
+        }
+
         setupGroupChips()
+        renderTabIndicator()
         renderForCurrentTab()
         loadAdvances()
+    }
+
+    private fun switchTab(tab: Tab) {
+        if (currentTab == tab) return
+        currentTab = tab
+        renderTabIndicator()
+        renderForCurrentTab()
+        renderList()
+    }
+
+    private fun renderTabIndicator() {
+        val activeBg = ContextCompat.getDrawable(this, R.drawable.bg_tab_underline)
+        val inactiveBg = android.graphics.drawable.ColorDrawable(
+            ContextCompat.getColor(this, R.color.white)
+        )
+        val activeColor = ContextCompat.getColor(this, R.color.primary)
+        val inactiveColor = ContextCompat.getColor(this, R.color.text_secondary)
+
+        binding.tabIssues.background =
+            if (currentTab == Tab.ISSUES) activeBg else inactiveBg
+        binding.tabIssues.setTextColor(
+            if (currentTab == Tab.ISSUES) activeColor else inactiveColor
+        )
+        binding.tabReceived.background =
+            if (currentTab == Tab.RECEIVED) activeBg else inactiveBg
+        binding.tabReceived.setTextColor(
+            if (currentTab == Tab.RECEIVED) activeColor else inactiveColor
+        )
     }
 
     override fun onResume() {
@@ -84,21 +138,7 @@ class CashAdvancesTabActivity : AppCompatActivity() {
         loadAdvances()
     }
 
-    // ─── Tab chips ─────────────────────────────────────────────────────────
-
-    private fun setupTabs() {
-        binding.tabGroup.removeAllViews()
-        listOf(Tab.ISSUES to getString(R.string.tab_issues), Tab.RECEIVED to getString(R.string.tab_received)).forEach { (tab, label) ->
-            val chip = buildChip(label, tab == currentTab) {
-                if (currentTab != tab) {
-                    currentTab = tab
-                    renderForCurrentTab()
-                    renderList()
-                }
-            }
-            binding.tabGroup.addView(chip)
-        }
-    }
+    // ─── Sub-grouping chips (Issues tab only) ──────────────────────────────
 
     private fun setupGroupChips() {
         binding.groupModeChips.removeAllViews()
@@ -149,18 +189,30 @@ class CashAdvancesTabActivity : AppCompatActivity() {
     // ─── Sub-control visibility ───────────────────────────────────────────
 
     private fun renderForCurrentTab() {
-        binding.groupModeChips.visibility = when (currentTab) {
-            Tab.ISSUES -> View.VISIBLE
-            Tab.RECEIVED -> View.GONE
-        }
-        // Add Expense visible on Received only AND only when the user has the
-        // `expense_voucher.add` action allowed in their merged ACL.
-        val canAddExpense =
-            currentTab == Tab.RECEIVED && session.canPerformAction("expense_voucher", "add")
+        val isReceived = currentTab == Tab.RECEIVED
+
+        // Issues-tab UI
+        binding.groupModeChips.visibility = if (isReceived) View.GONE else View.VISIBLE
+        binding.fabSend.visibility =
+            if (!isReceived && session.canPerformAction("cash_advance", "add"))
+                View.VISIBLE else View.GONE
+
+        // Received-tab UI
+        val canAddExpense = isReceived && session.canPerformAction("expense_voucher", "add")
         binding.btnAddExpense.visibility = if (canAddExpense) View.VISIBLE else View.GONE
         binding.btnAddExpense.setOnClickListener {
-            startActivity(android.content.Intent(this, com.ceyinfo.cerpcashbook.ui.expense.SubmitExpenseActivity::class.java))
+            startActivity(Intent(this, com.ceyinfo.cerpcashbook.ui.expense.SubmitExpenseActivity::class.java))
         }
+        binding.statsRow.visibility = if (isReceived) View.VISIBLE else View.GONE
+        binding.tvRecentHeader.visibility = if (isReceived) View.VISIBLE else View.GONE
+        binding.tvViewHistory.visibility = if (isReceived) View.VISIBLE else View.GONE
+    }
+
+    private fun renderStats(received: List<CashAdvance>) {
+        val total = received.sumOf { it.amount }
+        val pending = received.count { it.status == "pending" }
+        binding.tvTotalReceived.text = "LKR " + String.format(Locale.US, "%,.0f", total)
+        binding.tvPendingAck.text = String.format(Locale.US, "%02d Items", pending)
     }
 
     // ─── Data load ─────────────────────────────────────────────────────────
@@ -212,7 +264,7 @@ class CashAdvancesTabActivity : AppCompatActivity() {
     private fun renderList() {
         val rows: List<Any> = when (currentTab) {
             Tab.ISSUES -> buildIssuesRows()
-            Tab.RECEIVED -> buildReceivedRows()
+            Tab.RECEIVED -> buildReceivedRows().also { renderStats(it) }
         }
         binding.tvEmpty.visibility = if (rows.isEmpty()) View.VISIBLE else View.GONE
         binding.rvList.adapter = when (currentTab) {
@@ -223,7 +275,59 @@ class CashAdvancesTabActivity : AppCompatActivity() {
                     .putExtra(CashAdvanceDetailActivity.EXTRA_NAME, row.name)
                 startActivity(intent)
             }
-            Tab.RECEIVED -> FlatAdvanceAdapter(rows.filterIsInstance<CashAdvance>())
+            Tab.RECEIVED -> FlatAdvanceAdapter(
+                rows = rows.filterIsInstance<CashAdvance>(),
+                canAcknowledge = session.canPerformAction("cash_advance", "acknowledge"),
+                onAcknowledge = { advance -> confirmAndAcknowledge(advance) },
+            )
+        }
+    }
+
+    /**
+     * Show a confirm bottom sheet, call the ack endpoint, then show a success
+     * sheet. On success the advance is mutated in place and the row re-renders.
+     */
+    private fun confirmAndAcknowledge(advance: CashAdvance) {
+        val sender = listOfNotNull(advance.senderFirstName, advance.senderLastName)
+            .joinToString(" ").ifBlank { "—" }
+        com.ceyinfo.cerpcashbook.ui.common.ActionSheets.showConfirm(
+            context = this,
+            scope = lifecycleScope,
+            title = "Acknowledge cash received",
+            details = listOf(
+                com.ceyinfo.cerpcashbook.ui.common.ActionSheets.Detail(
+                    "Amount", "LKR " + String.format(Locale.US, "%,.2f", advance.amount)),
+                com.ceyinfo.cerpcashbook.ui.common.ActionSheets.Detail("From", sender),
+                com.ceyinfo.cerpcashbook.ui.common.ActionSheets.Detail(
+                    "Business Unit", advance.buName ?: "—"),
+            ),
+            confirmLabel = "Acknowledge",
+            warning = "This confirms you have received the cash. A ledger debit will post to your balance.",
+            tone = com.ceyinfo.cerpcashbook.ui.common.ActionSheets.Tone.SUCCESS,
+        ) {
+            val api = ApiClient.getService(this@CashAdvancesTabActivity)
+            val resp = api.acknowledgeAdvance(advance.id)
+            if (!(resp.isSuccessful && resp.body()?.success == true)) {
+                throw RuntimeException(resp.body()?.message ?: "Acknowledge failed")
+            }
+            // Update the row in place instead of full reload for snappier feedback.
+            allAdvances = allAdvances.map {
+                if (it.id == advance.id) it.copy(status = "acknowledged") else it
+            }
+            renderList()
+
+            com.ceyinfo.cerpcashbook.ui.common.ActionSheets.showSuccess(
+                context = this@CashAdvancesTabActivity,
+                title = "Acknowledged",
+                subtitle = "LKR " + String.format(Locale.US, "%,.2f", advance.amount) +
+                    " added to your balance.",
+                primaryLabel = "Done",
+                secondaryLabel = "View ledger",
+                onSecondary = {
+                    startActivity(Intent(this@CashAdvancesTabActivity,
+                        com.ceyinfo.cerpcashbook.ui.ledger.LedgerActivity::class.java))
+                },
+            )
         }
     }
 
@@ -337,13 +441,19 @@ class CashAdvancesTabActivity : AppCompatActivity() {
         }
     }
 
+    /**
+     * Received-tab row adapter. Shows the inline Acknowledge button on each
+     * `pending` row when the user has the `cash_advance.acknowledge` ACL.
+     */
     private class FlatAdvanceAdapter(
         private val rows: List<CashAdvance>,
+        private val canAcknowledge: Boolean,
+        private val onAcknowledge: (CashAdvance) -> Unit,
     ) : RecyclerView.Adapter<FlatAdvanceAdapter.VH>() {
 
         class VH(val binding: ItemAdvanceBinding) : RecyclerView.ViewHolder(binding.root)
 
-        private val dateFmt = SimpleDateFormat("dd MMM yyyy", Locale.US)
+        private val dateFmt = SimpleDateFormat("MMM dd, yyyy · hh:mm a", Locale.US)
         private val isoFmt = SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss", Locale.US)
 
         override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): VH {
@@ -367,11 +477,30 @@ class CashAdvancesTabActivity : AppCompatActivity() {
             }
             (b.tvStatus.background as? GradientDrawable)?.apply { mutate(); setColor(statusColor) }
 
-            b.tvFrom.text = "From: " + listOfNotNull(a.senderFirstName, a.senderLastName)
+            val senderName = listOfNotNull(a.senderFirstName, a.senderLastName)
                 .joinToString(" ").ifBlank { "—" }
+            b.tvFrom.text = "From: $senderName"
+            b.tvFromInitial.text = senderName.firstOrNull()?.uppercase() ?: "?"
 
-            if (!a.description.isNullOrBlank()) {
-                b.tvDescription.text = a.description
+            // Cycle a small palette so adjacent rows don't share the same avatar color.
+            val palette = intArrayOf(
+                android.graphics.Color.parseColor("#2563EB"),
+                android.graphics.Color.parseColor("#059669"),
+                android.graphics.Color.parseColor("#D97706"),
+                android.graphics.Color.parseColor("#7C3AED"),
+                android.graphics.Color.parseColor("#DB2777"),
+            )
+            (b.bgFromIcon.background as? GradientDrawable)?.apply {
+                mutate(); setColor(palette[position % palette.size])
+            }
+
+            // Description doubles as the BU/project subtitle when present.
+            val subtitle = listOfNotNull(
+                a.description?.takeIf { it.isNotBlank() },
+                a.buName?.takeIf { it.isNotBlank() },
+            ).joinToString(" · ")
+            if (subtitle.isNotEmpty()) {
+                b.tvDescription.text = subtitle
                 b.tvDescription.visibility = View.VISIBLE
             } else {
                 b.tvDescription.visibility = View.GONE
@@ -383,7 +512,15 @@ class CashAdvancesTabActivity : AppCompatActivity() {
                 } catch (_: Exception) { it.substring(0, 10.coerceAtMost(it.length)) }
             } ?: ""
 
-            b.btnAcknowledge.visibility = View.GONE
+            // Inline Acknowledge: only on pending rows AND when the user has
+            // the cash_advance.acknowledge action allowed in their ACL.
+            if (a.status == "pending" && canAcknowledge) {
+                b.btnAcknowledge.visibility = View.VISIBLE
+                b.btnAcknowledge.setOnClickListener { onAcknowledge(a) }
+            } else {
+                b.btnAcknowledge.visibility = View.GONE
+                b.btnAcknowledge.setOnClickListener(null)
+            }
         }
     }
 }

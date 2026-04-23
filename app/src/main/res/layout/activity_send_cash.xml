@@ -6,15 +6,17 @@
     android:background="@color/surface"
     android:orientation="vertical">
 
+    <!-- Header bar (green background) -->
     <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:background="@color/primary"
+        android:elevation="0dp"
         android:gravity="center_vertical"
         android:orientation="horizontal"
+        android:paddingHorizontal="16dp"
         android:paddingTop="48dp"
-        android:paddingBottom="16dp"
-        android:paddingHorizontal="20dp">
+        android:paddingBottom="14dp">
 
         <ImageView
             android:id="@+id/btn_back"
@@ -23,252 +25,451 @@
             android:background="?attr/selectableItemBackgroundBorderless"
             android:contentDescription="Back"
             android:padding="4dp"
+            android:rotation="180"
             android:src="@drawable/ic_chevron_right"
-            android:tint="@color/white"
-            android:rotation="180" />
+            android:tint="@color/white" />
 
         <TextView
-            android:layout_width="wrap_content"
+            android:layout_width="0dp"
             android:layout_height="wrap_content"
-            android:layout_marginStart="12dp"
+            android:layout_marginStart="8dp"
+            android:layout_weight="1"
             android:text="@string/send_cash"
             android:textColor="@color/white"
-            android:textSize="20sp"
+            android:textSize="18sp"
             android:textStyle="bold" />
+
+        <ImageView
+            android:id="@+id/btn_history"
+            android:layout_width="36dp"
+            android:layout_height="36dp"
+            android:background="?attr/selectableItemBackgroundBorderless"
+            android:contentDescription="Recent advances"
+            android:padding="6dp"
+            android:src="@drawable/ic_history"
+            android:tint="@color/white" />
     </LinearLayout>
 
     <ScrollView
         android:layout_width="match_parent"
         android:layout_height="0dp"
-        android:layout_weight="1">
+        android:layout_weight="1"
+        android:fillViewport="true">
 
         <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:orientation="vertical"
-            android:padding="20dp">
+            android:padding="16dp">
 
-            <!-- Date -->
-            <TextView
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:text="Date"
-                android:textColor="@color/on_surface"
-                android:textSize="14sp"
-                android:textStyle="bold" />
-
-            <com.google.android.material.button.MaterialButton
-                android:id="@+id/btn_pick_date"
-                style="@style/Widget.Material3.Button.OutlinedButton"
+            <!-- Recipient avatar card -->
+            <com.google.android.material.card.MaterialCardView
+                android:id="@+id/card_recipient"
                 android:layout_width="match_parent"
-                android:layout_height="52dp"
-                android:layout_marginTop="8dp"
-                android:gravity="start|center_vertical"
-                android:paddingHorizontal="16dp"
-                android:textAllCaps="false"
-                android:textSize="15sp"
-                app:cornerRadius="12dp" />
+                android:layout_height="wrap_content"
+                app:cardBackgroundColor="#F1F5F9"
+                app:cardCornerRadius="12dp"
+                app:cardElevation="0dp"
+                app:strokeWidth="0dp">
 
-            <!-- Select Custodian -->
+                <LinearLayout
+                    android:id="@+id/row_recipient_card"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:gravity="center_vertical"
+                    android:orientation="horizontal"
+                    android:padding="14dp">
+
+                    <FrameLayout
+                        android:layout_width="44dp"
+                        android:layout_height="44dp">
+
+                        <View
+                            android:id="@+id/bg_avatar"
+                            android:layout_width="44dp"
+                            android:layout_height="44dp"
+                            android:background="@drawable/bg_org_icon"
+                            android:backgroundTint="@color/primary" />
+
+                        <TextView
+                            android:id="@+id/tv_avatar"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:layout_gravity="center"
+                            android:textColor="@color/white"
+                            android:textSize="14sp"
+                            android:textStyle="bold" />
+                    </FrameLayout>
+
+                    <LinearLayout
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_marginStart="12dp"
+                        android:layout_weight="1"
+                        android:orientation="vertical">
+
+                        <TextView
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:letterSpacing="0.06"
+                            android:text="RECIPIENT"
+                            android:textAllCaps="true"
+                            android:textColor="@color/text_secondary"
+                            android:textSize="9sp" />
+
+                        <TextView
+                            android:id="@+id/tv_recipient_name"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:layout_marginTop="2dp"
+                            android:textColor="@color/on_surface"
+                            android:textSize="15sp"
+                            android:textStyle="bold" />
+
+                        <TextView
+                            android:id="@+id/tv_recipient_bu"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:textColor="@color/text_secondary"
+                            android:textSize="12sp" />
+                    </LinearLayout>
+
+                    <ImageView
+                        android:id="@+id/btn_change_recipient"
+                        android:layout_width="24dp"
+                        android:layout_height="24dp"
+                        android:contentDescription="Change recipient"
+                        android:src="@drawable/ic_chevron_right"
+                        android:tint="@color/text_secondary"
+                        android:visibility="gone" />
+                </LinearLayout>
+            </com.google.android.material.card.MaterialCardView>
+
+            <!-- Hidden custodian spinner — drives selection when no lock context -->
+            <Spinner
+                android:id="@+id/spinner_custodian"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="8dp"
+                android:background="@drawable/bg_input_outlined"
+                android:padding="12dp"
+                android:visibility="gone" />
             <TextView
                 android:id="@+id/lbl_custodian"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:layout_marginTop="20dp"
-                android:text="Select Custodian"
-                android:textColor="@color/on_surface"
-                android:textSize="14sp"
-                android:textStyle="bold" />
-
-            <Spinner
-                android:id="@+id/spinner_custodian"
-                android:layout_width="match_parent"
-                android:layout_height="52dp"
-                android:layout_marginTop="8dp"
-                android:background="@drawable/bg_login_card"
-                android:padding="12dp" />
-
-            <!-- Locked custodian / site context (when launched from a drill-down) -->
+                android:layout_marginTop="6dp"
+                android:text="Tap to pick a recipient"
+                android:textColor="@color/text_secondary"
+                android:textSize="11sp"
+                android:visibility="gone" />
             <TextView
                 android:id="@+id/tv_locked_context"
-                android:layout_width="match_parent"
+                android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:layout_marginTop="8dp"
-                android:background="@drawable/bg_login_card"
-                android:padding="12dp"
-                android:textColor="@color/on_surface"
-                android:textSize="14sp"
                 android:visibility="gone" />
 
-            <!-- Amount -->
-            <com.google.android.material.textfield.TextInputLayout
-                android:id="@+id/til_amount"
-                style="@style/Widget.Material3.TextInputLayout.OutlinedBox"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="20dp"
-                app:boxCornerRadiusBottomEnd="12dp"
-                app:boxCornerRadiusBottomStart="12dp"
-                app:boxCornerRadiusTopEnd="12dp"
-                app:boxCornerRadiusTopStart="12dp">
-
-                <com.google.android.material.textfield.TextInputEditText
-                    android:id="@+id/et_amount"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:hint="Amount (LKR)"
-                    android:inputType="numberDecimal"
-                    android:singleLine="true"
-                    android:textSize="15sp" />
-            </com.google.android.material.textfield.TextInputLayout>
-
-            <!-- Reference No -->
-            <com.google.android.material.textfield.TextInputLayout
-                style="@style/Widget.Material3.TextInputLayout.OutlinedBox"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="14dp"
-                app:boxCornerRadiusBottomEnd="12dp"
-                app:boxCornerRadiusBottomStart="12dp"
-                app:boxCornerRadiusTopEnd="12dp"
-                app:boxCornerRadiusTopStart="12dp">
-
-                <com.google.android.material.textfield.TextInputEditText
-                    android:id="@+id/et_reference"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:hint="Reference No (optional)"
-                    android:inputType="text"
-                    android:singleLine="true"
-                    android:textSize="15sp" />
-            </com.google.android.material.textfield.TextInputLayout>
-
-            <!-- Method of Transfer -->
+            <!-- DATE -->
             <TextView
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:layout_marginTop="20dp"
-                android:text="@string/method_of_transfer"
+                android:layout_marginTop="16dp"
+                android:text="Date"
                 android:textColor="@color/on_surface"
-                android:textSize="14sp"
+                android:textSize="13sp"
                 android:textStyle="bold" />
 
-            <Spinner
-                android:id="@+id/spinner_method"
-                android:layout_width="match_parent"
-                android:layout_height="52dp"
-                android:layout_marginTop="8dp"
-                android:background="@drawable/bg_login_card"
-                android:padding="12dp" />
-
-            <!-- Deposit to account (hidden when method = cash) -->
             <LinearLayout
-                android:id="@+id/row_bank"
+                android:id="@+id/btn_pick_date"
                 android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="16dp"
-                android:orientation="vertical"
-                android:visibility="gone">
+                android:layout_height="48dp"
+                android:layout_marginTop="6dp"
+                android:background="@drawable/bg_input_outlined"
+                android:clickable="true"
+                android:focusable="true"
+                android:foreground="?attr/selectableItemBackground"
+                android:gravity="center_vertical"
+                android:orientation="horizontal"
+                android:paddingHorizontal="14dp">
+
+                <ImageView
+                    android:layout_width="18dp"
+                    android:layout_height="18dp"
+                    android:contentDescription="Date"
+                    android:src="@drawable/ic_calendar"
+                    android:tint="@color/primary" />
 
                 <TextView
+                    android:id="@+id/tv_date_label"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:text="@string/deposit_to_account"
+                    android:layout_marginStart="10dp"
                     android:textColor="@color/on_surface"
-                    android:textSize="14sp"
-                    android:textStyle="bold" />
+                    android:textSize="14sp" />
+            </LinearLayout>
+
+            <!-- AMOUNT -->
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="14dp"
+                android:text="Amount (LKR)"
+                android:textColor="@color/on_surface"
+                android:textSize="13sp"
+                android:textStyle="bold" />
+
+            <com.google.android.material.card.MaterialCardView
+                android:id="@+id/til_amount"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="6dp"
+                app:cardBackgroundColor="@color/white"
+                app:cardCornerRadius="10dp"
+                app:cardElevation="0dp"
+                app:strokeColor="@color/primary"
+                app:strokeWidth="2dp">
 
                 <LinearLayout
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:layout_marginTop="8dp"
                     android:gravity="center_vertical"
-                    android:orientation="horizontal">
+                    android:orientation="horizontal"
+                    android:paddingHorizontal="14dp">
 
-                    <Spinner
-                        android:id="@+id/spinner_bank"
+                    <com.google.android.material.textfield.TextInputEditText
+                        android:id="@+id/et_amount"
                         android:layout_width="0dp"
-                        android:layout_height="52dp"
+                        android:layout_height="56dp"
                         android:layout_weight="1"
-                        android:background="@drawable/bg_login_card"
-                        android:padding="12dp" />
-
-                    <com.google.android.material.button.MaterialButton
-                        android:id="@+id/btn_add_bank"
-                        android:layout_width="52dp"
-                        android:layout_height="52dp"
-                        android:layout_marginStart="8dp"
-                        android:insetTop="0dp"
-                        android:insetBottom="0dp"
-                        android:text="+"
+                        android:background="@android:color/transparent"
+                        android:hint="0"
+                        android:inputType="numberDecimal"
+                        android:singleLine="true"
+                        android:textColor="@color/primary"
+                        android:textColorHint="#94A3B8"
                         android:textSize="22sp"
-                        app:cornerRadius="12dp" />
-                </LinearLayout>
-            </LinearLayout>
+                        android:textStyle="bold" />
 
-            <!-- Attach photo -->
-            <LinearLayout
+                    <ImageView
+                        android:id="@+id/btn_amount_copy"
+                        android:layout_width="24dp"
+                        android:layout_height="24dp"
+                        android:background="?attr/selectableItemBackgroundBorderless"
+                        android:contentDescription="Copy"
+                        android:src="@drawable/ic_copy"
+                        android:tint="@color/text_secondary" />
+                </LinearLayout>
+            </com.google.android.material.card.MaterialCardView>
+
+            <HorizontalScrollView
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
+                android:layout_marginTop="8dp"
+                android:scrollbars="none">
+
+                <com.google.android.material.chip.ChipGroup
+                    android:id="@+id/chips_amount"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    app:chipSpacingHorizontal="6dp"
+                    app:singleLine="true" />
+            </HorizontalScrollView>
+
+            <!-- REFERENCE -->
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
                 android:layout_marginTop="16dp"
+                android:text="Reference No (optional)"
+                android:textColor="@color/on_surface"
+                android:textSize="13sp"
+                android:textStyle="bold" />
+
+            <com.google.android.material.card.MaterialCardView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="6dp"
+                app:cardBackgroundColor="@color/white"
+                app:cardCornerRadius="10dp"
+                app:cardElevation="0dp"
+                app:strokeColor="#E2E8F0"
+                app:strokeWidth="1dp">
+
+                <com.google.android.material.textfield.TextInputEditText
+                    android:id="@+id/et_reference"
+                    android:layout_width="match_parent"
+                    android:layout_height="48dp"
+                    android:background="@android:color/transparent"
+                    android:hint="Enter reference number"
+                    android:inputType="text"
+                    android:paddingHorizontal="14dp"
+                    android:singleLine="true"
+                    android:textSize="14sp" />
+            </com.google.android.material.card.MaterialCardView>
+
+            <!-- METHOD OF TRANSFER -->
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="16dp"
+                android:text="Method of Transfer"
+                android:textColor="@color/on_surface"
+                android:textSize="13sp"
+                android:textStyle="bold" />
+
+            <HorizontalScrollView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="6dp"
+                android:scrollbars="none">
+
+                <com.google.android.material.chip.ChipGroup
+                    android:id="@+id/chips_method"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    app:chipSpacingHorizontal="6dp"
+                    app:singleLine="true"
+                    app:singleSelection="true"
+                    app:selectionRequired="true" />
+            </HorizontalScrollView>
+
+            <!-- BANK ROW (revealed for non-cash) -->
+            <LinearLayout
+                android:id="@+id/row_bank"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="14dp"
                 android:gravity="center_vertical"
-                android:orientation="horizontal">
+                android:orientation="horizontal"
+                android:visibility="gone">
+
+                <Spinner
+                    android:id="@+id/spinner_bank"
+                    android:layout_width="0dp"
+                    android:layout_height="48dp"
+                    android:layout_weight="1"
+                    android:background="@drawable/bg_input_outlined"
+                    android:padding="12dp" />
 
                 <com.google.android.material.button.MaterialButton
-                    android:id="@+id/btn_attach_photo"
-                    style="@style/Widget.Material3.Button.OutlinedButton"
-                    android:layout_width="0dp"
-                    android:layout_height="44dp"
-                    android:layout_weight="1"
-                    android:text="@string/attach_photo"
-                    android:textAllCaps="false"
-                    android:textSize="13sp"
-                    app:cornerRadius="10dp" />
+                    android:id="@+id/btn_add_bank"
+                    style="@style/Widget.Material3.Button.IconButton.Filled"
+                    android:layout_width="48dp"
+                    android:layout_height="48dp"
+                    android:layout_marginStart="8dp"
+                    android:contentDescription="Add bank account"
+                    android:insetTop="0dp"
+                    android:insetBottom="0dp"
+                    app:cornerRadius="10dp"
+                    app:icon="@drawable/ic_plus"
+                    app:iconGravity="textStart"
+                    app:iconPadding="0dp"
+                    app:iconSize="22dp"
+                    app:iconTint="@color/white" />
+            </LinearLayout>
+
+            <!-- ATTACH PHOTO (dashed dropzone) -->
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="16dp"
+                android:text="Attach Photo"
+                android:textColor="@color/on_surface"
+                android:textSize="13sp"
+                android:textStyle="bold" />
+
+            <FrameLayout
+                android:id="@+id/btn_attach_photo"
+                android:layout_width="match_parent"
+                android:layout_height="100dp"
+                android:layout_marginTop="6dp"
+                android:background="@drawable/bg_dashed_dropzone"
+                android:clickable="true"
+                android:focusable="true"
+                android:foreground="?attr/selectableItemBackground">
+
+                <ImageView
+                    android:id="@+id/iv_photo_preview"
+                    android:layout_width="match_parent"
+                    android:layout_height="match_parent"
+                    android:contentDescription="Receipt preview"
+                    android:scaleType="centerCrop"
+                    android:visibility="gone" />
+
+                <LinearLayout
+                    android:id="@+id/photo_placeholder"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_gravity="center"
+                    android:gravity="center"
+                    android:orientation="vertical">
+
+                    <ImageView
+                        android:layout_width="28dp"
+                        android:layout_height="28dp"
+                        android:contentDescription="Upload"
+                        android:src="@drawable/ic_camera_plus"
+                        android:tint="#94A3B8" />
+
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="4dp"
+                        android:text="Upload Receipt or Proof"
+                        android:textColor="#64748B"
+                        android:textSize="12sp" />
+                </LinearLayout>
 
                 <com.google.android.material.button.MaterialButton
                     android:id="@+id/btn_remove_photo"
                     style="@style/Widget.Material3.Button.TextButton"
                     android:layout_width="wrap_content"
-                    android:layout_height="44dp"
-                    android:layout_marginStart="8dp"
-                    android:text="@string/remove_photo"
+                    android:layout_height="32dp"
+                    android:layout_gravity="top|end"
+                    android:layout_margin="6dp"
+                    android:minWidth="0dp"
+                    android:paddingHorizontal="10dp"
+                    android:text="Remove"
                     android:textAllCaps="false"
-                    android:textSize="13sp"
+                    android:textColor="@color/error"
+                    android:textSize="11sp"
                     android:visibility="gone" />
-            </LinearLayout>
+            </FrameLayout>
 
-            <ImageView
-                android:id="@+id/iv_photo_preview"
-                android:layout_width="match_parent"
-                android:layout_height="160dp"
-                android:layout_marginTop="10dp"
-                android:background="@drawable/bg_login_card"
-                android:contentDescription="Receipt preview"
-                android:scaleType="centerCrop"
-                android:visibility="gone" />
+            <!-- REMARKS -->
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="16dp"
+                android:text="Remarks"
+                android:textColor="@color/on_surface"
+                android:textSize="13sp"
+                android:textStyle="bold" />
 
-            <!-- Remarks -->
-            <com.google.android.material.textfield.TextInputLayout
-                style="@style/Widget.Material3.TextInputLayout.OutlinedBox"
+            <com.google.android.material.card.MaterialCardView
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:layout_marginTop="14dp"
-                app:boxCornerRadiusBottomEnd="12dp"
-                app:boxCornerRadiusBottomStart="12dp"
-                app:boxCornerRadiusTopEnd="12dp"
-                app:boxCornerRadiusTopStart="12dp">
+                android:layout_marginTop="6dp"
+                app:cardBackgroundColor="@color/white"
+                app:cardCornerRadius="10dp"
+                app:cardElevation="0dp"
+                app:strokeColor="#E2E8F0"
+                app:strokeWidth="1dp">
 
                 <com.google.android.material.textfield.TextInputEditText
                     android:id="@+id/et_description"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:hint="@string/remarks"
+                    android:background="@android:color/transparent"
+                    android:gravity="top"
+                    android:hint="Add a note about this transaction..."
                     android:inputType="textMultiLine"
-                    android:minLines="2"
-                    android:textSize="15sp" />
-            </com.google.android.material.textfield.TextInputLayout>
+                    android:minLines="3"
+                    android:padding="14dp"
+                    android:textSize="14sp" />
+            </com.google.android.material.card.MaterialCardView>
 
-            <!-- Error -->
+            <!-- ERROR -->
             <TextView
                 android:id="@+id/tv_error"
                 android:layout_width="match_parent"
@@ -282,7 +483,7 @@
         </LinearLayout>
     </ScrollView>
 
-    <!-- Bottom button -->
+    <!-- Sticky bottom Send button -->
     <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
@@ -297,14 +498,14 @@
             android:text="Send Cash"
             android:textAllCaps="false"
             android:textSize="15sp"
-            app:cornerRadius="12dp" />
+            app:cornerRadius="14dp" />
     </LinearLayout>
 
     <ProgressBar
         android:id="@+id/progress"
-        android:layout_width="match_parent"
-        android:layout_height="4dp"
         style="?android:attr/progressBarStyleHorizontal"
+        android:layout_width="match_parent"
+        android:layout_height="3dp"
         android:indeterminate="true"
         android:visibility="gone" />
 </LinearLayout>

@@ -31,14 +31,18 @@
 
     <!-- Cash Advances tabbed screen -->
     <string name="cash_advances_title">Cash Advances</string>
-    <string name="tab_issues">Issues</string>
+    <string name="tab_issues">Issued</string>
     <string name="tab_received">Received</string>
     <string name="group_by_person">By Person</string>
     <string name="group_by_site">By Site</string>
     <string name="add_new">Add New</string>
-    <string name="add_expense">Add Expense</string>
+    <string name="add_expense">+ Add Expense</string>
     <string name="no_records">No records</string>
     <string name="balance_label">Balance</string>
+    <string name="recent_advances">Recent Advances</string>
+    <string name="view_transaction_history">View Transaction History</string>
+    <string name="total_received">TOTAL RECEIVED</string>
+    <string name="pending_ack">PENDING ACK</string>
 
     <!-- Send Cash (Slice B additions) -->
     <string name="method_of_transfer">Method of Transfer</string>
@@ -63,6 +67,11 @@
     <string name="acknowledge">Acknowledge</string>
     <string name="submit_expense">Submit Expense</string>
     <string name="review_vouchers">Review Vouchers</string>
+    <string name="review_vouchers_subtitle">Manage and audit submitted expenses</string>
+    <string name="filter">Filter</string>
+    <string name="voucher_id_label">VOUCHER ID</string>
+    <string name="amount_label">Amount</string>
+    <string name="date_label">Date</string>
 
     <!-- Alerts (role-wise dashboard) -->
     <string name="alert_pending_approvals">Pending Approvals</string>

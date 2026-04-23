@@ -11,21 +11,17 @@ import android.widget.LinearLayout
 import android.widget.TextView
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.content.ContextCompat
-import androidx.core.view.ViewCompat
 import androidx.core.view.WindowCompat
-import androidx.core.view.WindowInsetsCompat
-import androidx.core.view.updatePadding
 import androidx.lifecycle.lifecycleScope
 import com.ceyinfo.cerpcashbook.R
 import android.widget.Toast
 import com.ceyinfo.cerpcashbook.data.remote.ApiClient
 import com.ceyinfo.cerpcashbook.databinding.ActivityModuleHubBinding
 import com.ceyinfo.cerpcashbook.ui.advances.CashAdvancesTabActivity
-import com.ceyinfo.cerpcashbook.ui.ledger.LedgerActivity
+import com.ceyinfo.cerpcashbook.ui.common.BottomNav
 import com.ceyinfo.cerpcashbook.ui.login.LoginActivity
 import com.ceyinfo.cerpcashbook.ui.notifications.NotificationsActivity
 import com.ceyinfo.cerpcashbook.ui.review.ReviewVouchersActivity
-import com.ceyinfo.cerpcashbook.ui.settings.SettingsActivity
 import com.ceyinfo.cerpcashbook.util.SessionManager
 import com.google.android.material.card.MaterialCardView
 import kotlinx.coroutines.launch
@@ -49,12 +45,6 @@ class ModuleHubActivity : AppCompatActivity() {
         binding = ActivityModuleHubBinding.inflate(layoutInflater)
         setContentView(binding.root)
 
-        ViewCompat.setOnApplyWindowInsetsListener(binding.bottomBar) { view, insets ->
-            val navBarInsets = insets.getInsets(WindowInsetsCompat.Type.navigationBars())
-            view.updatePadding(bottom = navBarInsets.bottom)
-            insets
-        }
-
         session = SessionManager(this)
 
         if (!session.isLoggedIn) {
@@ -67,6 +57,7 @@ class ModuleHubActivity : AppCompatActivity() {
         setupBottomNav()
         buildModuleTiles()
         loadNotifBadge()
+        checkForUpdates()
 
         binding.swipeRefresh.setOnRefreshListener {
             loadNotifBadge()
@@ -266,37 +257,224 @@ class ModuleHubActivity : AppCompatActivity() {
     }
 
     private fun setupBottomNav() {
-        binding.navHome.setOnClickListener { /* already home */ }
-        binding.navNotifications.setOnClickListener {
-            startActivity(Intent(this, NotificationsActivity::class.java))
-        }
-        binding.navLedger.setOnClickListener {
-            startActivity(Intent(this, LedgerActivity::class.java))
-        }
-        binding.navSettings.setOnClickListener {
-            startActivity(Intent(this, SettingsActivity::class.java))
+        BottomNav.bind(binding.bottomNav.root, this, BottomNav.Tab.HOME)
+    }
+
+    /**
+     * Background-check GitHub Releases for a newer signed APK. Throttled to
+     * once every 4 hours by [AppUpdater]; respects the user's "Skip" choice.
+     * Silent if there's nothing to do — only opens the dialog when an update
+     * is actually available.
+     */
+    private fun checkForUpdates() {
+        lifecycleScope.launch {
+            val updater = com.ceyinfo.cerpcashbook.updater.AppUpdater(this@ModuleHubActivity)
+            val release = updater.checkForUpdate()
+            if (release != null) {
+                com.ceyinfo.cerpcashbook.updater.UpdateDialog.show(
+                    this@ModuleHubActivity, release, updater
+                )
+            }
         }
     }
 
     private fun loadNotifBadge() {
-        // Aggregated across every site the user can reach — backend handles it
-        // when site_bu_id is omitted.
+        // Aggregated across every BU the user can reach — backend BU-scopes by user.
+        // Drives both the bottom-nav alert badge and the hub alert cards.
         lifecycleScope.launch {
             try {
                 val api = ApiClient.getService(this@ModuleHubActivity)
-                val response = api.getDashboardStats()
-                if (response.isSuccessful && response.body()?.success == true) {
-                    val stats = response.body()!!.data!!
-                    if (stats.unreadNotifications > 0) {
-                        binding.tvNotifBadge.text = stats.unreadNotifications.toString()
-                        binding.tvNotifBadge.visibility = View.VISIBLE
-                    } else {
-                        binding.tvNotifBadge.visibility = View.GONE
-                    }
+
+                // Notifications badge (independent of advances/vouchers state).
+                val statsResp = api.getDashboardStats()
+                val unread = if (statsResp.isSuccessful && statsResp.body()?.success == true) {
+                    statsResp.body()?.data?.unreadNotifications ?: 0
+                } else 0
+                if (unread > 0) {
+                    binding.bottomNav.tvNotifBadge.text = unread.toString()
+                    binding.bottomNav.tvNotifBadge.visibility = View.VISIBLE
+                } else {
+                    binding.bottomNav.tvNotifBadge.visibility = View.GONE
                 }
+
+                buildAlertCards(unread)
             } catch (_: Exception) {
-                // Silent — badge is supplementary
+                // Silent — alerts are supplementary; UI degrades to no cards.
             }
         }
+    }
+
+    /**
+     * Build the "needs your attention" cards above the tile grid.
+     * Three sources, each rendered only if (a) the user has the relevant
+     * action ACL and (b) there's at least one item to act on.
+     *
+     *   - Pending advances I need to acknowledge      → Cash Advance / Received
+     *   - Submitted vouchers I can approve            → Expense Vouchers
+     *   - Unread notifications                        → Notifications
+     */
+    private suspend fun buildAlertCards(unreadCount: Int) {
+        binding.alertsContainer.removeAllViews()
+        binding.alertsContainer.visibility = View.GONE
+
+        val api = ApiClient.getService(this@ModuleHubActivity)
+
+        // Pending advances awaiting MY acknowledgement
+        val canAck = session.canPerformAction("cash_advance", "acknowledge")
+        var pendingForMe = 0
+        if (canAck) {
+            try {
+                val resp = api.getCashAdvances(
+                    buId = null,
+                    recipientId = session.userId,
+                    status = "pending",
+                    page = 1, limit = 1,
+                )
+                if (resp.isSuccessful && resp.body()?.success == true) {
+                    pendingForMe = resp.body()?.total ?: (resp.body()?.data?.size ?: 0)
+                }
+            } catch (_: Exception) { /* card just won't appear */ }
+        }
+
+        // Vouchers awaiting MY review
+        val canReview = session.canPerformAction("expense_voucher", "approve") ||
+            session.canPerformAction("expense_voucher", "reject")
+        var pendingReview = 0
+        if (canReview) {
+            try {
+                val resp = api.getExpenseVouchers(
+                    buId = null,
+                    status = "submitted",
+                    page = 1, limit = 1,
+                )
+                if (resp.isSuccessful && resp.body()?.success == true) {
+                    pendingReview = resp.body()?.total ?: (resp.body()?.data?.size ?: 0)
+                }
+            } catch (_: Exception) { /* silent */ }
+        }
+
+        if (pendingForMe > 0) {
+            addAlertCard(
+                title = "$pendingForMe ${if (pendingForMe == 1) "advance" else "advances"} awaiting acknowledgement",
+                subtitle = "Tap to confirm receipt and post to your balance.",
+                accent = "#D97706",
+                bg = "#FFFBEB",
+                iconRes = R.drawable.ic_check_circle,
+            ) {
+                startActivity(
+                    Intent(this, com.ceyinfo.cerpcashbook.ui.advances.CashAdvancesTabActivity::class.java)
+                        .putExtra(
+                            com.ceyinfo.cerpcashbook.ui.advances.CashAdvancesTabActivity.EXTRA_INITIAL_TAB,
+                            com.ceyinfo.cerpcashbook.ui.advances.CashAdvancesTabActivity.TAB_RECEIVED,
+                        )
+                )
+            }
+        }
+
+        if (pendingReview > 0) {
+            addAlertCard(
+                title = "$pendingReview ${if (pendingReview == 1) "voucher" else "vouchers"} awaiting review",
+                subtitle = "Tap to approve or reject submitted expenses.",
+                accent = "#2563EB",
+                bg = "#EFF6FF",
+                iconRes = R.drawable.ic_review,
+            ) {
+                startActivity(
+                    Intent(this, com.ceyinfo.cerpcashbook.ui.review.ReviewVouchersActivity::class.java)
+                )
+            }
+        }
+
+        if (unreadCount > 0) {
+            addAlertCard(
+                title = "$unreadCount unread ${if (unreadCount == 1) "notification" else "notifications"}",
+                subtitle = "Tap to read updates from your team.",
+                accent = "#7C3AED",
+                bg = "#F3E8FF",
+                iconRes = R.drawable.ic_notifications,
+            ) {
+                startActivity(Intent(this, NotificationsActivity::class.java))
+            }
+        }
+
+        binding.alertsContainer.visibility =
+            if (binding.alertsContainer.childCount > 0) View.VISIBLE else View.GONE
+    }
+
+    /** Programmatically add a single alert card to the alerts container. */
+    private fun addAlertCard(
+        title: String,
+        subtitle: String,
+        accent: String,
+        bg: String,
+        iconRes: Int,
+        onClick: () -> Unit,
+    ) {
+        val dp = resources.displayMetrics.density
+        val card = com.google.android.material.card.MaterialCardView(this).apply {
+            layoutParams = LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT
+            ).apply {
+                if (binding.alertsContainer.childCount > 0) topMargin = (10 * dp).toInt()
+            }
+            radius = 14 * dp
+            cardElevation = 0f
+            setCardBackgroundColor(android.graphics.Color.parseColor(bg))
+            strokeColor = android.graphics.Color.parseColor(accent)
+            strokeWidth = (1 * dp).toInt()
+            isClickable = true; isFocusable = true
+        }
+        val row = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+            setPadding((14 * dp).toInt(), (12 * dp).toInt(), (14 * dp).toInt(), (12 * dp).toInt())
+        }
+        val iconFrame = FrameLayout(this).apply {
+            layoutParams = LinearLayout.LayoutParams((36 * dp).toInt(), (36 * dp).toInt())
+        }
+        val iconBg = View(this).apply {
+            layoutParams = FrameLayout.LayoutParams((36 * dp).toInt(), (36 * dp).toInt())
+            background = ContextCompat.getDrawable(context, R.drawable.bg_org_icon)?.mutate()
+            (background as? GradientDrawable)?.setColor(android.graphics.Color.parseColor(accent))
+        }
+        val iconView = ImageView(this).apply {
+            layoutParams = FrameLayout.LayoutParams((18 * dp).toInt(), (18 * dp).toInt()).apply {
+                gravity = Gravity.CENTER
+            }
+            setImageResource(iconRes)
+            setColorFilter(android.graphics.Color.WHITE)
+        }
+        iconFrame.addView(iconBg); iconFrame.addView(iconView)
+        row.addView(iconFrame)
+
+        val texts = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f).apply {
+                marginStart = (12 * dp).toInt()
+            }
+        }
+        texts.addView(android.widget.TextView(this).apply {
+            text = title
+            setTextColor(android.graphics.Color.parseColor(accent))
+            textSize = 13f
+            paint.isFakeBoldText = true
+        })
+        texts.addView(android.widget.TextView(this).apply {
+            text = subtitle
+            setTextColor(ContextCompat.getColor(context, R.color.text_secondary))
+            textSize = 11f
+            setPadding(0, (2 * dp).toInt(), 0, 0)
+        })
+        row.addView(texts)
+
+        row.addView(ImageView(this).apply {
+            layoutParams = LinearLayout.LayoutParams((16 * dp).toInt(), (16 * dp).toInt())
+            setImageResource(R.drawable.ic_chevron_right)
+            setColorFilter(android.graphics.Color.parseColor(accent))
+        })
+
+        card.addView(row)
+        card.setOnClickListener { onClick() }
+        binding.alertsContainer.addView(card)
     }
 }

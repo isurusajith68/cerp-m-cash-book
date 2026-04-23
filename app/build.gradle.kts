@@ -17,6 +17,11 @@ android {
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 
         buildConfigField("String", "API_BASE_URL", "\"https://cerpapi.ceyinfo.com/api/v1/\"")
+
+        // GitHub repo for in-app auto-update (AppUpdater hits the Releases API).
+        // Change these if the project is moved to a different owner/repo.
+        buildConfigField("String", "GITHUB_OWNER", "\"isurusajith68\"")
+        buildConfigField("String", "GITHUB_REPO", "\"cerp-m-cash-book\"")
     }
 
     buildTypes {

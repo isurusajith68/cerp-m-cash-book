@@ -1,6 +1,5 @@
 package com.ceyinfo.cerpcashbook.ui.review
 
-import android.graphics.drawable.GradientDrawable
 import android.os.Bundle
 import android.view.LayoutInflater
 import android.view.View
@@ -22,13 +21,19 @@ import com.ceyinfo.cerpcashbook.util.SessionManager
 import com.google.android.material.chip.Chip
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import kotlinx.coroutines.launch
+import java.text.SimpleDateFormat
+import java.util.Locale
 
 class ReviewVouchersActivity : AppCompatActivity() {
 
     private lateinit var binding: ActivityReviewVouchersBinding
     private lateinit var session: SessionManager
     private var vouchers: MutableList<ExpenseVoucher> = mutableListOf()
-    private var currentStatus: String? = "submitted"
+    private var currentStatus: String? = null  // null = "All"
+
+    // ISO date → "22 Apr 2026"
+    private val isoDateFmt = SimpleDateFormat("yyyy-MM-dd", Locale.US)
+    private val displayDateFmt = SimpleDateFormat("dd MMM yyyy", Locale.US)
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -43,6 +48,12 @@ class ReviewVouchersActivity : AppCompatActivity() {
         binding.rvVouchers.layoutManager = LinearLayoutManager(this)
         binding.swipeRefresh.setOnRefreshListener { loadVouchers() }
         binding.swipeRefresh.setColorSchemeResources(R.color.primary)
+
+        // Filter button (top-right): for now opens the same status chips below.
+        // Reserved for future advanced filters (date range, custodian, etc.).
+        binding.btnFilter.setOnClickListener {
+            Toast.makeText(this, R.string.coming_soon, Toast.LENGTH_SHORT).show()
+        }
 
         setupStatusChips()
         loadVouchers()
@@ -157,23 +168,46 @@ class ReviewVouchersActivity : AppCompatActivity() {
         override fun onBindViewHolder(holder: VH, position: Int) {
             val v = vouchers[position]
             val b = holder.b
+            val ctx = b.root.context
 
             b.tvVoucherNo.text = v.voucherNo
-            b.tvAmount.text = "LKR ${String.format("%,.2f", v.amount)}"
-            b.tvDescription.text = v.description
-            b.tvCategory.text = v.category ?: ""
-            b.tvDate.text = v.expenseDate.substring(0, 10)
-            b.tvCustodian.text = "${v.recipientFirstName ?: ""} ${v.recipientLastName ?: ""}"
 
-            b.tvStatus.text = v.status.uppercase()
-            val statusColor = when (v.status) {
-                "submitted" -> R.color.status_submitted
-                "approved" -> R.color.status_approved
-                "rejected" -> R.color.status_rejected
-                else -> R.color.text_secondary
+            // Friendly date: "22 Apr 2026"
+            b.tvDate.text = runCatching {
+                displayDateFmt.format(isoDateFmt.parse(v.expenseDate.substring(0, 10))!!)
+            }.getOrDefault(v.expenseDate.substring(0, 10))
+
+            // Description row hidden when blank
+            if (!v.description.isNullOrBlank()) {
+                b.tvDescription.text = v.description
+                b.rowDescription.visibility = View.VISIBLE
+            } else {
+                b.rowDescription.visibility = View.GONE
             }
-            (b.tvStatus.background as? GradientDrawable)?.setColor(
-                ContextCompat.getColor(b.root.context, statusColor)
+
+            // Status pill: tinted background + matching icon + label
+            val (statusLabel, chipBg, iconRes, fgColor) = when (v.status) {
+                "approved" -> Quad("Approved", R.drawable.bg_status_chip_approved,
+                    R.drawable.ic_check_circle, "#15803D")
+                "rejected" -> Quad("Rejected", R.drawable.bg_status_chip_rejected,
+                    R.drawable.ic_x_circle, "#DC2626")
+                "submitted" -> Quad("Pending", R.drawable.bg_status_chip_pending,
+                    R.drawable.ic_clock, "#64748B")
+                else -> Quad(v.status.replaceFirstChar { it.uppercase() },
+                    R.drawable.bg_status_chip_pending, R.drawable.ic_clock, "#64748B")
+            }
+            val fg = android.graphics.Color.parseColor(fgColor)
+            b.statusChip.setBackgroundResource(chipBg)
+            b.tvStatus.text = statusLabel
+            b.tvStatus.setTextColor(fg)
+            b.ivStatusIcon.setImageResource(iconRes)
+            b.ivStatusIcon.setColorFilter(fg)
+
+            // Amount — turn red on rejected (matches mockup)
+            b.tvAmount.text = "LKR ${String.format(Locale.US, "%,.2f", v.amount)}"
+            b.tvAmount.setTextColor(
+                if (v.status == "rejected") fg
+                else ContextCompat.getColor(ctx, R.color.on_surface)
             )
 
             // ACL-gated buttons: only show what the current user is actually
@@ -193,4 +227,11 @@ class ReviewVouchersActivity : AppCompatActivity() {
             }
         }
     }
+
+    private data class Quad(
+        val label: String,
+        val chipBgRes: Int,
+        val iconRes: Int,
+        val fgColor: String,
+    )
 }
