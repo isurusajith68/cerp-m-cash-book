@@ -24,46 +24,20 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.launch
 
-/**
- * Receives FCM push messages and refreshes the in-app badge / shows a system
- * notification depending on app state.
- *
- * Backend payload conventions (data-only message — keeps the system free to
- * decide whether to show our notification):
- *
- *   data: {
- *     "title":  "Cash advance acknowledged",
- *     "body":   "Kamal acknowledged LKR 50,000.00",
- *     "type":   "advance_acknowledged" | "advance_received" | "voucher_submitted"
- *               | "voucher_approved"   | "voucher_rejected" | "advance_cancelled",
- *     "ref_id": "<advance or voucher uuid>",   // optional — drives deep-link
- *   }
- *
- * Tap routing:
- *   advance_*   → CashAdvancesTabActivity (issued/received tab inferred from type)
- *                 + EXTRA_DETAIL_ID when ref_id is present
- *   voucher_*   → ReviewVouchersActivity (or notifications inbox if user lacks ACL)
- *   anything else → NotificationsActivity inbox
- */
+
 class CerpFcmService : FirebaseMessagingService() {
 
     private val ioScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
     companion object {
         private const val TAG = "CerpFcmService"
-        const val CHANNEL_ID = "cerp_cashbook_default"
+    
+        const val CHANNEL_ID = "cerp_cashbook_default_v2"
         const val CHANNEL_NAME = "Cash Book"
         private const val CHANNEL_DESC = "Cash advances, expense vouchers, and approvals"
     }
 
-    /**
-     * Called when a fresh FCM registration token is issued. Push it to the
-     * backend so we can target this device.
-     *
-     * Note: this can fire BEFORE the user logs in. If we have no session
-     * cookie yet the POST will 401 — `LoginActivity.refreshRoleThenGoToHub`
-     * also re-registers the current token, so post-login we're covered.
-     */
+  
     override fun onNewToken(token: String) {
         Log.i(TAG, "FCM token rotated: $token")
         registerToken(applicationContext, token)
@@ -105,7 +79,11 @@ class CerpFcmService : FirebaseMessagingService() {
             .setContentTitle(title)
             .setContentText(body)
             .setStyle(NotificationCompat.BigTextStyle().bigText(body))
+          
             .setPriority(NotificationCompat.PRIORITY_HIGH)
+            .setDefaults(NotificationCompat.DEFAULT_ALL)
+            .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
+            .setCategory(NotificationCompat.CATEGORY_MESSAGE)
             .setAutoCancel(true)
             .setContentIntent(pending)
 
@@ -140,6 +118,11 @@ class CerpFcmService : FirebaseMessagingService() {
         nm.createNotificationChannel(
             NotificationChannel(CHANNEL_ID, CHANNEL_NAME, NotificationManager.IMPORTANCE_HIGH).apply {
                 description = CHANNEL_DESC
+                enableVibration(true)
+                vibrationPattern = longArrayOf(0, 250, 200, 250)
+                enableLights(true)
+                setShowBadge(true)
+                lockscreenVisibility = android.app.Notification.VISIBILITY_PUBLIC
             }
         )
     }
