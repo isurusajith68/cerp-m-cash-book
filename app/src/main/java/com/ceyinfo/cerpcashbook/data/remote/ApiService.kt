@@ -134,4 +134,16 @@ interface ApiService {
     suspend fun getDashboardStats(
         @Query("bu_id") buId: String? = null
     ): Response<ApiResponse<DashboardStats>>
+
+   
+    @POST("site-cash/fcm-token")
+    suspend fun registerFcmToken(
+        @retrofit2.http.Body body: FcmTokenRegisterRequest
+    ): Response<ApiResponse<Any>>
 }
+
+data class FcmTokenRegisterRequest(
+    val token: String,
+    val platform: String = "android",
+)
+

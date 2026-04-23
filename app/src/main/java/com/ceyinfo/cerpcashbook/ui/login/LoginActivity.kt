@@ -188,12 +188,6 @@ class LoginActivity : AppCompatActivity() {
         finish()
     }
 
-    /**
-     * Refresh both the aggregated cash role and the merged entity permissions
-     * across every BU the user is assigned to. Both come from the server
-     * unioned across the user's whole assignment tree — no BU selection
-     * needed on the client.
-     */
     private suspend fun refreshRoleThenGoToHub() {
         try {
             val api = ApiClient.getService(this@LoginActivity)
@@ -210,6 +204,20 @@ class LoginActivity : AppCompatActivity() {
                 ?.takeIf { it.isSuccessful && it.body()?.success == true }
                 ?.body()?.data
             session.savePermissions(perms)
+
+       
+            com.google.firebase.messaging.FirebaseMessaging.getInstance().token
+                .addOnSuccessListener { token ->
+                    if (!token.isNullOrBlank()) {
+                        lifecycleScope.launch {
+                            runCatching {
+                                api.registerFcmToken(
+                                    com.ceyinfo.cerpcashbook.data.remote.FcmTokenRegisterRequest(token = token)
+                                )
+                            }
+                        }
+                    }
+                }
         } catch (_: Exception) {
             // Non-fatal — hub renders fine even if these calls fail (tiles hidden).
         }

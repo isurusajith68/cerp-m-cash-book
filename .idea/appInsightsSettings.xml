@@ -8,10 +8,10 @@
             <InsightsFilterSettings>
               <option name="connection">
                 <ConnectionSetting>
-                  <option name="appId" value="PLACEHOLDER" />
-                  <option name="mobileSdkAppId" value="" />
-                  <option name="projectId" value="" />
-                  <option name="projectNumber" value="" />
+                  <option name="appId" value="com.ceyinfo.cerpcashbook" />
+                  <option name="mobileSdkAppId" value="1:1062578635400:android:0055dceb4547077636153d" />
+                  <option name="projectId" value="cerp-fcm" />
+                  <option name="projectNumber" value="1062578635400" />
                 </ConnectionSetting>
               </option>
               <option name="signal" value="SIGNAL_UNSPECIFIED" />

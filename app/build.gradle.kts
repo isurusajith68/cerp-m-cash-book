@@ -1,6 +1,7 @@
 plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.android)
+    alias(libs.plugins.google.services)
 }
 
 android {
@@ -77,6 +78,10 @@ dependencies {
     // ViewModel + LiveData
     implementation(libs.viewmodel.ktx)
     implementation(libs.livedata.ktx)
+
+    // Firebase Cloud Messaging — push notifications. BOM keeps versions aligned.
+    implementation(platform(libs.firebase.bom))
+    implementation(libs.firebase.messaging)
 
     // Testing
     testImplementation(libs.junit)

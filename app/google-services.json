@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "1062578635400",
+    "project_id": "cerp-fcm",
+    "storage_bucket": "cerp-fcm.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:1062578635400:android:0055dceb4547077636153d",
+        "android_client_info": {
+          "package_name": "com.ceyinfo.cerpcashbook"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyA1ELmDi7C4wWAEG-r6F3ci6Z9ibjN1AaY"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
